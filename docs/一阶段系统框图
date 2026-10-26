@@ -1,0 +1,42 @@
+flowchart TB
+    subgraph NODE["节点层｜采集、感知与无线接入"]
+        direction LR
+        A["固定节点 A<br/>ESP32 + LoRa"]
+        B["固定节点 B<br/>ESP32 + LoRa"]
+        M["移动节点<br/>ESP32 + LoRa"]
+    end
+
+    NET["核心通信网络<br/>节点发现 · 数据转发 · ACK · 重传"]
+
+    A <-->|"LoRa 链路"| NET
+    B <-->|"LoRa 链路"| NET
+    M <-->|"LoRa 链路"| NET
+
+    G["网关节点<br/>ESP32 + LoRa"]
+    NET <-->|"无线数据汇聚"| G
+
+    subgraph APP["监测与展示层｜电脑端"]
+        direction LR
+        PC["电脑上位机<br/>串口接收 · 参数配置"]
+        LOG["数据记录与可视化<br/>RSSI · SNR · 丢包率 · 延迟"]
+        PC --> LOG
+    end
+
+    G <-->|"UART / USB"| PC
+
+    P["协议机制<br/>节点 ID · 序号 · TTL · CRC"] -.-> NET
+
+    classDef node fill:#EAF3FF,stroke:#3B82F6,stroke-width:2px,color:#12304A,font-size:16px;
+    classDef core fill:#1456D9,stroke:#083B9A,stroke-width:4px,color:#FFFFFF,font-size:21px,font-weight:bold;
+    classDef gateway fill:#DDF7EE,stroke:#16A36A,stroke-width:3px,color:#124B37,font-size:17px,font-weight:bold;
+    classDef app fill:#FFF3D6,stroke:#E3A008,stroke-width:2px,color:#594000,font-size:16px;
+    classDef meta fill:#F3F4F6,stroke:#6B7280,stroke-width:1px,color:#374151,font-size:14px;
+
+    class A,B,M node;
+    class NET core;
+    class G gateway;
+    class PC,LOG app;
+    class P meta;
+
+    style NODE fill:#F7FBFF,stroke:#8BB8F5,stroke-width:2px;
+    style APP fill:#FFFCF3,stroke:#E8C66A,stroke-width:2px;
