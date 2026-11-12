@@ -2,6 +2,11 @@
 
 C 负责实验口径和统计，各方向保存自己的原始证据；目前尚无已核验测试结果。
 
+步骤和空白模板（还没有实测数据，不要据此勾选任务）：
+
+- [两节点无线测试步骤](两节点无线测试步骤.md)（[#3](https://github.com/China-wzy41/MobiWeave-Protocol/issues/3)，到货后做）
+- [串口记录模板](串口记录模板.md)（[#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2) 的 A 部分）
+
 实际产生数据时使用以下结构，无需先堆空目录：
 
 ```text
