@@ -15,4 +15,6 @@ Tests/
 
 执行步骤和指标见[实验方法](../docs/experiments/README.md)。日志格式由 [B 统一](../docs/protocol/README.md)，模拟工具放 [Simulation](../Simulation/README.md)，显示和保存工具放 [Host](../Host/README.md)。
 
+A 的记录模板（尚未产生实测数据）：[串口](serial-log.md) 对应 [#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2)，[两节点无线](lora-two-node.md) 对应 [#3](https://github.com/China-wzy41/MobiWeave-Protocol/issues/3)。LoRa 暂按未到货，这两个文件是步骤和空表。
+
 关闭任务前附复现步骤、证据路径、验收人和日期。不要把一次演示当成全部实验通过。
