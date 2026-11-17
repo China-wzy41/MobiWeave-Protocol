@@ -4,9 +4,9 @@
 
 ## 2026-11-17 已有的实物记录
 
-当天最终状态以 [工程日志](2026-11-17-电脑-ESP32-S3-LoRa串口联调.md) 第十节为准（北京时间 22:53）。[板1、板2](../../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md) 只按 ESP 链路首次成功时间编号。
+[工程日志](2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)是当天成果和注意事项。[板1、板2](../../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md) 只按 ESP 链路首次成功时间编号。
 
-已记录：两块 ESP32 经 UART 完成 Entry AT、AT OK 和 AT+HELP 读回。命令带明确的 CR/LF。供电是 PJ15 只给 LoRa 5V，ESP 自己 USB，固定共地。日志前几节里“尚未进入 AT”等句子保留为当时记录，由第十节覆盖。
+已记录：两块 ESP32 经 UART 完成 Entry AT、AT OK 和 AT+HELP 读回。命令带明确的 CR/LF。供电是 PJ15 只给 LoRa 5V，ESP 自己 USB，固定共地。
 
 尚未做成，因此下面的方法仍然待执行：第三套稳定启动、RF 合规参数写入与读回、RSSI 采集、两节点无线互传、三轮 1000 包、三节点携带、他人独立复现。读回仍是 LEVEL2 / 433.15 MHz 信道 00 / 22 dBm，不是已写入的 `AT+POWE10`、`AT+LEVEL3`、`AT+CHANNEL01`。不记录 SNR。N16R8/N8R8、PCB V1.3/V1.4 与板1、板2 没有对应关系。
 
