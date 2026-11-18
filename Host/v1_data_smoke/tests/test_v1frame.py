@@ -1,3 +1,4 @@
+import dataclasses
 import struct
 import unittest
 
@@ -47,7 +48,10 @@ class CodecTest(unittest.TestCase):
         self.assertEqual(fields.destination_id, 3)
         self.assertEqual(fields.payload, b"SOS")
         self.assertEqual(events[0].crc, 0xD0BA)
-        self.assertIsNone(business_reject(fields, local_id=2))
+        self.assertEqual(
+            business_reject(fields, local_id=2),
+            "最终目的不是本节点，本工具只做直达",
+        )
 
     def test_two_node_addresses_are_not_the_sos_relay_sample(self) -> None:
         frame = two_node_text(1, 2, 1, "hi")
@@ -61,6 +65,15 @@ class CodecTest(unittest.TestCase):
         self.assertNotEqual(fields.destination_id, 3)
         self.assertIsNone(business_reject(fields, local_id=2))
         self.assertEqual(business_reject(fields, local_id=1), "本跳地址不是本节点")
+
+    def test_next_hop_local_final_dest_elsewhere_is_not_local_delivery(self) -> None:
+        fields = dataclasses.replace(sos_fields(), hop_limit=1)
+        self.assertEqual(fields.receiver_id, 2)
+        self.assertEqual(fields.destination_id, 3)
+        self.assertEqual(
+            business_reject(fields, local_id=2),
+            "最终目的不是本节点，本工具只做直达",
+        )
 
     def test_chunks_coalescing_noise_and_resync(self) -> None:
         good = two_node_text(2, 1, 4, "B004")

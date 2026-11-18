@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import queue
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +18,7 @@ from v1frame import (
     payload_text,
     two_node_text,
 )
+from link import LinkSession, write_exact
 
 BAUD = 115200
 
@@ -43,8 +42,14 @@ class RunFiles:
         self.events.flush()
 
     def close(self) -> None:
+        errors: list[str] = []
         for handle in (self.tx, self.rx, self.chunks, self.events):
-            handle.close()
+            try:
+                handle.close()
+            except OSError as exc:
+                errors.append(str(exc))
+        if errors:
+            raise OSError("；".join(errors))
 
 
 class App(tk.Tk):
@@ -54,12 +59,7 @@ class App(tk.Tk):
         self.geometry("760x560")
         self.run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.sequence = 1
-        self.serial: serial.Serial | None = None
-        self.files: RunFiles | None = None
-        self.parser = StreamParser(idle_s=TOOL_IDLE_TIMEOUT_S)
-        self.inbox: queue.Queue = queue.Queue()
-        self.worker: threading.Thread | None = None
-        self.stop = threading.Event()
+        self.session: LinkSession | None = None
         self._build()
         self.after(50, self._drain)
         self.protocol("WM_DELETE_WINDOW", self._close)
@@ -73,8 +73,10 @@ class App(tk.Tk):
         ttk.Button(top, text="刷新", command=self._refresh).grid(row=0, column=2)
         ttk.Label(top, text="115200 8N1").grid(row=0, column=3, padx=8)
         self.node = tk.IntVar(value=1)
-        ttk.Radiobutton(top, text="节点 1", variable=self.node, value=1).grid(row=0, column=4)
-        ttk.Radiobutton(top, text="节点 2", variable=self.node, value=2).grid(row=0, column=5)
+        self.node_1 = ttk.Radiobutton(top, text="节点 1", variable=self.node, value=1)
+        self.node_2 = ttk.Radiobutton(top, text="节点 2", variable=self.node, value=2)
+        self.node_1.grid(row=0, column=4)
+        self.node_2.grid(row=0, column=5)
         self.connect_button = ttk.Button(top, text="连接", command=self._toggle)
         self.connect_button.grid(row=0, column=6, padx=8)
 
@@ -108,20 +110,29 @@ class App(tk.Tk):
         elif names:
             self.port.set(names[0])
 
+    def _set_node_locked(self, locked: bool) -> None:
+        state = "disabled" if locked else "normal"
+        self.node_1.configure(state=state)
+        self.node_2.configure(state=state)
+
     def _peer(self) -> int:
-        return 2 if self.node.get() == 1 else 1
+        node_id = self.session.node_id if self.session is not None else self.node.get()
+        return 2 if node_id == 1 else 1
 
     def _toggle(self) -> None:
-        if self.serial is None:
+        if self.session is None:
             self._connect()
         else:
             self._disconnect()
 
     def _connect(self) -> None:
+        if self.session is not None:
+            self._disconnect()
         name = self.port.get().strip()
         if not name:
             self.status.configure(text="先刷新并选择串口。")
             return
+        node_id = self.node.get()
         port = serial.Serial()
         port.port = name
         port.baudrate = BAUD
@@ -136,84 +147,114 @@ class App(tk.Tk):
         except serial.SerialException as exc:
             self.status.configure(text=f"打开失败：{exc}")
             return
-        self.serial = port
-        self.parser = StreamParser(idle_s=TOOL_IDLE_TIMEOUT_S)
-        self.files = RunFiles(Path(__file__).resolve().parent / "logs", self.run_id, self.node.get())
-        self.stop.clear()
-        self.worker = threading.Thread(target=self._read_loop, daemon=True)
-        self.worker.start()
+        files = RunFiles(Path(__file__).resolve().parent / "logs", self.run_id, node_id)
+        session = LinkSession(port, files, StreamParser(idle_s=TOOL_IDLE_TIMEOUT_S), node_id)
+        self.session = session
+        session.start(self._read_loop)
+        self._set_node_locked(True)
         self.connect_button.configure(text="断开")
         self.status.configure(
             text=(
-                f"已连接 {name}，本机节点 {self.node.get()}，对端 {self._peer()}。"
+                f"已连接 {name}，本机节点 {node_id}，对端 {self._peer()}。"
                 "已尽量拉低 DTR/RTS；有的板子仍可能在打开端口时重启。"
-                "本工具不发送 AT，也不改射频。"
+                "本工具不发送 AT，也不改射频。boot_counter 固定为 1，不保证跨重启唯一。"
             )
         )
 
-    def _disconnect(self) -> None:
-        self.stop.set()
-        port = self.serial
-        self.serial = None
-        if port is not None:
-            try:
-                port.close()
-            except serial.SerialException:
-                pass
-        if self.files is not None:
-            self.files.close()
-            self.files = None
+    def _disconnect(self, because: str | None = None) -> None:
+        session = self.session
+        self.session = None
+        self._set_node_locked(False)
+        note = None
+        if session is not None:
+            note = session.shutdown()
+        text = because or "已断开。"
+        if note:
+            text = f"{text} {note}"
+        text += f" 日志在 logs/{self.run_id}。"
         self.connect_button.configure(text="连接")
-        self.status.configure(text=f"已断开。日志在 logs/{self.run_id}。")
+        self.status.configure(text=text)
 
-    def _read_loop(self) -> None:
-        while not self.stop.is_set():
-            port = self.serial
-            if port is None:
-                break
+    def _read_loop(self, session: LinkSession) -> None:
+        port = session.port
+        files = session.files
+        parser = session.parser
+        while not session.stop.is_set():
             try:
                 chunk = port.read(256)
             except serial.SerialException as exc:
-                self.inbox.put(("error", str(exc)))
+                session.push(("error", str(exc)))
+                break
+            except OSError as exc:
+                session.push(("error", str(exc)))
                 break
             now = time.monotonic()
-            if chunk and self.files is not None:
-                self.files.rx.write(chunk)
-                self.files.rx.flush()
-                self.files.chunks.write(
-                    f"{_now()} bytes={len(chunk)} note=一次read不是一帧 hex={chunk.hex()}\n"
-                )
-                self.files.chunks.flush()
-            events = self.parser.feed(chunk, now)
+            if chunk:
+                try:
+                    files.rx.write(chunk)
+                    files.rx.flush()
+                    files.chunks.write(
+                        f"{_now()} bytes={len(chunk)} note=一次read不是一帧 hex={chunk.hex()}\n"
+                    )
+                    files.chunks.flush()
+                except OSError as exc:
+                    session.push(("error", f"写接收日志失败：{exc}"))
+                    break
+            events = parser.feed(chunk, now)
             if events:
-                self.inbox.put(("events", events))
+                session.push(("events", events))
             time.sleep(0.02)
 
-    def _send(self, frame: bytes, label: str) -> None:
-        port = self.serial
-        files = self.files
-        if port is None or files is None:
+    def _send(self, frame: bytes, label: str) -> bool:
+        session = self.session
+        if session is None:
             self.status.configure(text="还没有连接。")
-            return
+            return False
+        outcome = write_exact(session.port.write, frame)
+        accepted = frame[: outcome.accepted]
+        files = session.files
         try:
-            port.write(frame)
-        except serial.SerialException as exc:
-            self.status.configure(text=f"发送失败：{exc}")
-            return
-        files.tx.write(frame)
-        files.tx.flush()
-        files.events.write(f"{_now()} TX {label} bytes={len(frame)} hex={frame.hex()}\n")
-        files.events.flush()
-        self._write_ui(f"已发送 {label}，{len(frame)} 字节。本机屏幕不会回显。")
+            if accepted:
+                files.tx.write(accepted)
+                files.tx.flush()
+            files.events.write(
+                f"{_now()} TX {label} intended={len(frame)} accepted={outcome.accepted} "
+                f"complete={'yes' if outcome.complete else 'no'} "
+                f"error={outcome.error or ''} hex={accepted.hex()}\n"
+            )
+            files.events.flush()
+        except OSError as exc:
+            if outcome.complete:
+                self.status.configure(
+                    text=f"串口已接受全部 {outcome.accepted} 字节，但日志写入失败：{exc}"
+                )
+            else:
+                self.status.configure(
+                    text=f"发送不完整（{outcome.accepted}/{len(frame)}），且日志写入失败：{exc}"
+                )
+            return outcome.complete
+        if outcome.complete:
+            self._write_ui(f"已完整发送 {label}，{outcome.accepted} 字节。本机屏幕不会回显。")
+            return True
+        self._write_ui(
+            f"发送不完整 {label}：只写出 {outcome.accepted}/{len(frame)} 字节。"
+            f"{outcome.error or ''} 不能当成整帧已发出。"
+        )
+        self.status.configure(text="发送不完整，不能当成整帧已发出。")
+        return False
 
     def _send_text(self) -> None:
         text = self.message.get()
         if text == "":
             self.status.configure(text="先输入一条短消息。")
             return
+        session = self.session
+        if session is None:
+            self.status.configure(text="还没有连接。")
+            return
         try:
             encoded = text.encode("utf-8")
-            frame = two_node_text(self.node.get(), self._peer(), self.sequence, text)
+            frame = two_node_text(session.node_id, self._peer(), self.sequence, text)
         except ValueError as exc:
             self.status.configure(text=str(exc))
             return
@@ -221,38 +262,37 @@ class App(tk.Tk):
             self.status.configure(text="UTF-8 超过 132 字节，没有发送。")
             return
         seq = self.sequence
-        self.sequence += 1
-        self._send(frame, f"DATA seq={seq}")
+        if self._send(frame, f"DATA seq={seq}"):
+            self.sequence += 1
 
     def _send_bad(self) -> None:
-        if self.serial is None:
+        if self.session is None:
             self.status.configure(text="还没有连接。")
             return
         seq = self.sequence
-        self.sequence += 1
         frame = two_node_text(
-            self.node.get(), self._peer(), seq, "BAD-CRC", bad_crc=True
+            self.session.node_id, self._peer(), seq, "BAD-CRC", bad_crc=True
         )
-        self._send(frame, f"坏CRC测试 seq={seq}")
+        if self._send(frame, f"坏CRC测试 seq={seq}"):
+            self.sequence += 1
 
     def _drain(self) -> None:
-        while True:
-            try:
-                kind, payload = self.inbox.get_nowait()
-            except queue.Empty:
-                break
-            if kind == "error":
-                self.status.configure(text=f"串口读失败：{payload}")
-                self._disconnect()
-                continue
-            for event in payload:
-                self._show_event(event)
+        session = self.session
+        if session is not None:
+            for kind, payload in session.take():
+                if kind == "error":
+                    self.status.configure(text=f"串口读失败：{payload}")
+                    self._disconnect(because=f"串口读失败：{payload}")
+                    break
+                for event in payload:
+                    self._show_event(session, event)
         self.after(50, self._drain)
 
-    def _show_event(self, event) -> None:
-        files = self.files
+    def _show_event(self, session: LinkSession, event) -> None:
+        files = session.files
+        local_id = session.node_id
         if event.kind == "crc_ok" and event.fields is not None:
-            reason = business_reject(event.fields, self.node.get())
+            reason = business_reject(event.fields, local_id)
             if reason is None:
                 line = (
                     f"有效帧 seq={event.fields.sequence} "

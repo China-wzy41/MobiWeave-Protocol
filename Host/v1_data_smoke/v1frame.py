@@ -245,6 +245,8 @@ def business_reject(fields: DataFields, local_id: int) -> str | None:
             return "地址非法"
     if fields.receiver_id != local_id:
         return "本跳地址不是本节点"
+    if fields.destination_id != local_id:
+        return "最终目的不是本节点，本工具只做直达"
     if fields.source_id == 0 or fields.boot_counter == 0 or fields.sequence == 0:
         return "消息编号字段为 0"
     if fields.priority not in PRIORITY_OK:
