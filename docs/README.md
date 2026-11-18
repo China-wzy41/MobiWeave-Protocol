@@ -3,7 +3,7 @@
 - [本月计划](planning/first-month.md)：五个人先做什么、何时交付。
 - [一年路线](planning/roadmap.md)：八阶段、依赖、成果厚度和进度规则。
 - [协议与日志](protocol/README.md)：B 统一、A/C/D 共用的设计要求。
-- [实验与验收](experiments/README.md)：从模拟、无线基线到可信对照实验。
+- [实验与验收](experiments/README.md)：从模拟、无线基线到可信对照实验。2026-11-17 的实物串口记录在[工程日志](experiments/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)，成功板在[板1、板2](../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)。这是 UART/AT，不是无线基线。
 - [研究问题](research/README.md)：假设、原始资料和创新边界。
 - [项目需求](requirements)：当前范围与延期项。
 
