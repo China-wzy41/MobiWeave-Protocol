@@ -386,6 +386,9 @@ class App(tk.Tk):
 
     def _write_ui(self, line: str) -> None:
         self.log.insert("end", line + "\n")
+        end = int(self.log.index("end-1c").split(".")[0])
+        if end > 200:
+            self.log.delete("1.0", f"{end - 200}.0")
         self.log.see("end")
 
     def _close(self) -> None:

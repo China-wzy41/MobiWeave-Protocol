@@ -1,6 +1,8 @@
 import os
 import struct
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -296,6 +298,7 @@ class ReliableTest(unittest.TestCase):
                 os.replace = original
             self.assertEqual(issued, [])
             self.assertEqual(store._read(), 2)
+            self.assertFalse(store.lock_path.exists())
             store.file.unlink()
             with self.assertRaises(IdentityError):
                 store.open_boot()
@@ -349,9 +352,13 @@ class ReliableTest(unittest.TestCase):
         push(engine, bad_crc(direct(2, "bad", boot=1)), 1)
         push(engine, direct(3, "c", boot=1), 2)
         push(engine, direct(1, "next", boot=2), 3)
-        self.assertEqual(engine.sequence_holes(), [((1, 1), 2)])
+        spans, omitted = engine.hole_spans()
+        self.assertEqual(omitted, 0)
+        self.assertEqual([(item.start, item.end, item.count) for item in spans], [(2, 2, 1)])
+        self.assertEqual(spans[0].source, 1)
+        self.assertEqual(spans[0].boot, 1)
         self.assertEqual(engine.bad_crc, 1)
-        self.assertNotIn("丢包", engine.summary().split("序号空洞")[0])
+        self.assertNotIn("丢包率", engine.summary())
         self.assertIn("不是无线丢包", engine.summary())
 
     def test_age_does_not_wrap(self) -> None:
@@ -377,6 +384,147 @@ class ReliableTest(unittest.TestCase):
         self.assertEqual(LIMITS.cache_limit, 16)
         self.assertEqual(LIMITS.lifetime_ms, 60000)
         self.assertEqual(LIMITS.hop_limit, 1)
+
+    def test_large_hole_summary_stays_bounded(self) -> None:
+        engine = NodeEngine(2, 1, 1, FAST)
+        engine.accepted_ids = [(1, 1, 5), (1, 1, 1), (1, 1, 3)]
+        spans, omitted = engine.hole_spans()
+        self.assertEqual(omitted, 0)
+        self.assertEqual(
+            [(item.start, item.end, item.count) for item in spans],
+            [(2, 2, 1), (4, 4, 1)],
+        )
+        engine.accepted_ids = [(1, 1, 1), (1, 1, 0xFFFFFFFF)]
+        started = time.perf_counter()
+        text = engine.summary()
+        self.assertLess(time.perf_counter() - started, 0.05)
+        self.assertLess(len(text), 400)
+        self.assertIn("缺2..4294967294共4294967293", text)
+        self.assertNotIn("缺2,3,4", text)
+        engine.accepted_ids = [(1, 1, seq) for seq in range(1, 40, 2)]
+        shown, hidden = engine.hole_spans()
+        self.assertEqual(len(shown), 8)
+        self.assertGreater(hidden, 0)
+        self.assertLess(len(engine.summary()), 500)
+        limits = ExperimentLimits(
+            ack_timeout_ms=10, max_retries=0, retry_backoff_ms=1,
+            busy_backoff_ms=1, cache_limit=2, lifetime_ms=1000, hop_limit=1,
+        )
+        trimmed = NodeEngine(2, 1, 1, limits)
+        trimmed.accepted_ids = [(1, 1, 1), (1, 1, 100)] + [(1, 1, seq) for seq in range(200, 220)]
+        trimmed._trim_history()
+        self.assertEqual(len(trimmed.accepted_ids), 8)
+        self.assertNotIn((1, 1, 1), trimmed.accepted_ids)
+        self.assertNotIn("缺2..", trimmed.summary())
+
+    def test_boot_lock_conflict_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            store = BootStore(directory)
+            self.assertEqual(store.open_boot(), 1)
+            self.assertFalse(any(
+                path.name == "boot.tmp" or path.name.endswith(".tmp") for path in directory.iterdir()
+            ))
+            held = os.open(store.lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            try:
+                with self.assertRaises(IdentityError):
+                    store.open_boot()
+                self.assertEqual(store._read(), 1)
+            finally:
+                os.close(held)
+                os.unlink(store.lock_path)
+            holder = BootStore(directory)
+            entered = threading.Event()
+            release = threading.Event()
+
+            def pause() -> None:
+                entered.set()
+                self.assertTrue(release.wait(2))
+
+            holder._after_acquire = pause
+            outcome: dict[str, int] = {}
+
+            def run() -> None:
+                outcome["boot"] = holder.open_boot()
+
+            worker = threading.Thread(target=run)
+            worker.start()
+            self.assertTrue(entered.wait(2))
+            with self.assertRaises(IdentityError):
+                BootStore(directory).open_boot()
+            self.assertEqual(store._read(), 1)
+            release.set()
+            worker.join(2)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(outcome["boot"], 2)
+            self.assertFalse(holder.lock_path.exists())
+
+    def test_history_stays_bounded_for_active_done_and_cancel(self) -> None:
+        limits = ExperimentLimits(
+            ack_timeout_ms=10, max_retries=0, retry_backoff_ms=1,
+            busy_backoff_ms=1, cache_limit=16, lifetime_ms=100000, hop_limit=1,
+        )
+        engine = NodeEngine(1, 2, 1, limits)
+        for index in range(5):
+            request = engine.submit_text(f"f{index}", index * 100)
+            assert request is not None
+            engine.note_write(request, len(request.frame), True, None, index * 100)
+            engine.poll(index * 100 + 10)
+        self.assertGreater(sum(item.state == "failed" for item in engine.outbound), 0)
+        for index in range(16):
+            engine.submit_text(f"a{index}", 10000 + index)
+        active = {"queued", "armed", "waiting", "backoff", "busy_wait"}
+        self.assertEqual(sum(item.state in active for item in engine.outbound), 16)
+        self.assertEqual(sum(item.state == "failed" for item in engine.outbound), 0)
+        self.assertLessEqual(len(engine.outbound), 16)
+        failures = NodeEngine(1, 2, 1, limits)
+        for index in range(40):
+            request = failures.submit_text(f"x{index}", index * 100)
+            assert request is not None
+            failures.note_write(request, len(request.frame), True, None, index * 100)
+            failures.poll(index * 100 + 10)
+            self.assertLessEqual(len(failures.outbound), 16)
+        self.assertLessEqual(len(failures.lines), 64)
+        cancelled = NodeEngine(1, 2, 1, limits)
+        for index in range(30):
+            cancelled.resume()
+            cancelled.submit_text(f"c{index}", index)
+            cancelled.cancel()
+            self.assertLessEqual(len(cancelled.outbound), 16)
+            self.assertTrue(all(item.state == "cancelled" for item in cancelled.outbound))
+
+    def test_ack_matches_only_a_completed_write(self) -> None:
+        pair = Pair()
+        pair.send_reliable("one", 0)
+        self.assertIsNone(pair.a.submit_text("two", 1))
+        queued = next(item for item in pair.a.outbound if item.state == "queued")
+        early = encode_ack(AckFields(
+            2, 1, queued.source_id, queued.boot_counter, queued.sequence, STATUS_ACCEPTED
+        ))
+        self.assertIn("没有匹配", pair.a.on_event(one_event(early), 2).lines[0])
+        self.assertEqual(queued.state, "queued")
+        self.assertIsNone(queued.full_write_ms)
+        self.assertTrue(any(item.state == "waiting" for item in pair.a.outbound))
+
+        short = NodeEngine(1, 2, 1, FAST)
+        request = short.submit_text("s", 0)
+        assert request is not None
+        outcome = write_exact(ScriptPort([2, 0]).write, request.frame)
+        short.note_write(request, outcome.accepted, outcome.complete, outcome.error, 0)
+        message = short.outbound[0]
+        self.assertIsNone(message.full_write_ms)
+        ack = encode_ack(AckFields(2, 1, 1, 1, message.sequence, STATUS_ACCEPTED))
+        self.assertIn("没有匹配", short.on_event(one_event(ack), 1).lines[0])
+        self.assertNotEqual(message.state, "hop_cached")
+
+        late = Pair()
+        sent, _, _ = late.send_reliable("late", 0)
+        late.a.poll(100)
+        self.assertEqual(late.a.outbound[0].state, "backoff")
+        received = push(late.b, sent.frame, 5)
+        done = late.a.on_event(one_event(received.ack or b""), 120)
+        self.assertIn("本跳缓存确认", done.lines[0])
+        self.assertEqual(late.a.poll(500), [])
 
 
 def bad_crc(frame: bytes) -> bytes:

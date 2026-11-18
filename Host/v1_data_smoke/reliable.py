@@ -9,6 +9,7 @@ as end-to-end delivery.
 from __future__ import annotations
 
 import os
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
@@ -64,32 +65,73 @@ def age_at(anchor_age: int, anchor_ms: int, now_ms: int) -> int:
 
 
 class BootStore:
-    """Persistent boot counter. Sequence stays in memory for that boot."""
+    """Persistent boot counter. One node directory is locked across processes.
+
+    The lock is an exclusive create of ``boot.lock`` (``O_CREAT|O_EXCL``).
+    That flag is the same on Windows and Linux; this does not use ``fcntl``.
+    A crash or power loss can leave the lock or a partially durable directory
+    entry. Those cases fail closed. This is not an absolute uniqueness proof.
+    """
 
     def __init__(self, directory) -> None:
         self.directory = directory
         self.file = directory / "boot"
         self.marker = directory / "initialized"
+        self.lock_path = directory / "boot.lock"
+        self._lock_fd: int | None = None
+        self._after_acquire = None
 
     def open_boot(self) -> int:
         self.directory.mkdir(parents=True, exist_ok=True)
-        if not self.file.exists():
-            if self.marker.exists():
-                raise IdentityError("启动计数文件丢失，拒绝从旧编号重新开始")
-            value = 1
-        else:
-            value = self._read()
-            if value >= UINT32_MAX:
-                raise IdentityError("启动计数已满，停止创建新消息")
-            value += 1
-        self._write(value)
+        self._acquire()
         try:
-            self.marker.write_bytes(b"1\n")
+            if self._after_acquire is not None:
+                self._after_acquire()
+            if not self.file.exists():
+                if self.marker.exists():
+                    raise IdentityError("启动计数文件丢失，拒绝从旧编号重新开始")
+                value = 1
+            else:
+                value = self._read()
+                if value >= UINT32_MAX:
+                    raise IdentityError("启动计数已满，停止创建新消息")
+                value += 1
+            self._write(value)
+            self._write_marker()
+            if self._read() != value:
+                raise IdentityError("启动计数写后读回不一致")
+            return value
+        finally:
+            self._release()
+
+    def _acquire(self) -> None:
+        flags = os.O_CREAT | os.O_EXCL | os.O_RDWR
+        try:
+            self._lock_fd = os.open(self.lock_path, flags)
+        except FileExistsError as exc:
+            raise IdentityError("启动计数被占用，拒绝分配可能重复的编号") from exc
         except OSError as exc:
-            raise IdentityError(f"写启动标记失败：{exc}") from exc
-        if self._read() != value:
-            raise IdentityError("启动计数写后读回不一致")
-        return value
+            raise IdentityError(f"无法独占启动计数：{exc}") from exc
+        try:
+            os.write(self._lock_fd, str(os.getpid()).encode("ascii"))
+            os.fsync(self._lock_fd)
+        except OSError as exc:
+            self._release()
+            raise IdentityError(f"无法独占启动计数：{exc}") from exc
+
+    def _release(self) -> None:
+        fd = self._lock_fd
+        if fd is None:
+            return
+        self._lock_fd = None
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(self.lock_path)
+        except OSError:
+            pass
 
     def _read(self) -> int:
         try:
@@ -105,7 +147,7 @@ class BootStore:
         return value
 
     def _write(self, value: int) -> None:
-        temporary = self.directory / "boot.tmp"
+        temporary = self.directory / f"boot-{uuid.uuid4().hex}.tmp"
         data = f"{value}\n".encode("ascii")
         try:
             with temporary.open("wb") as handle:
@@ -113,8 +155,44 @@ class BootStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, self.file)
+            self._fsync_dir()
         except OSError as exc:
             raise IdentityError(f"写启动计数失败：{exc}") from exc
+        finally:
+            try:
+                if temporary.exists():
+                    temporary.unlink()
+            except OSError:
+                pass
+
+    def _write_marker(self) -> None:
+        temporary = self.directory / f"initialized-{uuid.uuid4().hex}.tmp"
+        try:
+            with temporary.open("wb") as handle:
+                handle.write(b"1\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.marker)
+            self._fsync_dir()
+        except OSError as exc:
+            raise IdentityError(f"写启动标记失败：{exc}") from exc
+        finally:
+            try:
+                if temporary.exists():
+                    temporary.unlink()
+            except OSError:
+                pass
+
+    def _fsync_dir(self) -> None:
+        if os.name == "nt":
+            return
+        fd = os.open(self.directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        except OSError as exc:
+            raise IdentityError(f"目录同步失败：{exc}") from exc
+        finally:
+            os.close(fd)
 
 
 @dataclass
@@ -179,6 +257,15 @@ def _immutable(fields: DataFields) -> tuple:
     )
 
 
+@dataclass(frozen=True)
+class HoleSpan:
+    source: int
+    boot: int
+    start: int
+    end: int
+    count: int
+
+
 class NodeEngine:
     def __init__(
         self,
@@ -209,7 +296,52 @@ class NodeEngine:
     def submit_text(self, text: str, now_ms: int) -> SendRequest | None:
         message = self._new_outbound(text, now_ms, reliable=True)
         self.outbound.append(message)
-        return self._take_send(now_ms)
+        try:
+            return self._take_send(now_ms)
+        finally:
+            self._trim_history()
+
+    def note_write(self, request: SendRequest, accepted: int, complete: bool, error: str | None, now_ms: int) -> list[str]:
+        try:
+            return self._note_write(request, accepted, complete, error, now_ms)
+        finally:
+            self._trim_history()
+
+    def poll(self, now_ms: int) -> list[SendRequest]:
+        try:
+            if self.closed:
+                return []
+            self._purge(now_ms)
+            waiting = [item for item in self.outbound if item.state == "waiting"]
+            if waiting:
+                message = waiting[0]
+                if message.deadline is not None and now_ms >= message.deadline:
+                    self._on_timeout(message, now_ms)
+                else:
+                    return []
+            for message in self.outbound:
+                if message.state in ("backoff", "busy_wait") and message.deadline is not None and now_ms >= message.deadline:
+                    message.state = "queued"
+            return self._take_all_ready(now_ms)
+        finally:
+            self._trim_history()
+
+    def cancel(self) -> None:
+        self.closed = True
+        for message in self.outbound:
+            if message.state in ("queued", "armed", "waiting", "backoff", "busy_wait"):
+                message.state = "cancelled"
+                message.deadline = None
+        self._trim_history()
+
+    def resume(self) -> None:
+        self.closed = False
+
+    def on_event(self, event: FrameEvent, now_ms: int) -> RxResult:
+        try:
+            return self._on_event(event, now_ms)
+        finally:
+            self._trim_history()
 
     def submit_smoke(self, text: str, now_ms: int) -> SendRequest:
         message = self._new_outbound(text, now_ms, reliable=False)
@@ -228,7 +360,7 @@ class NodeEngine:
         self.lines = []
         return lines
 
-    def note_write(self, request: SendRequest, accepted: int, complete: bool, error: str | None, now_ms: int) -> list[str]:
+    def _note_write(self, request: SendRequest, accepted: int, complete: bool, error: str | None, now_ms: int) -> list[str]:
         if request.message_id in self.recent_writes and not any(
             item.message_id == request.message_id and item.state == "armed" for item in self.outbound
         ):
@@ -256,33 +388,7 @@ class NodeEngine:
         message.deadline = now_ms + self.limits.ack_timeout_ms
         return [f"已完整写出 {self._data_label(message, 'DATA')}，等待本跳 ACK。端到端未知。"]
 
-    def poll(self, now_ms: int) -> list[SendRequest]:
-        if self.closed:
-            return []
-        self._purge(now_ms)
-        waiting = [item for item in self.outbound if item.state == "waiting"]
-        if waiting:
-            message = waiting[0]
-            if message.deadline is not None and now_ms >= message.deadline:
-                self._on_timeout(message, now_ms)
-            else:
-                return []
-        for message in self.outbound:
-            if message.state in ("backoff", "busy_wait") and message.deadline is not None and now_ms >= message.deadline:
-                message.state = "queued"
-        return self._take_all_ready(now_ms)
-
-    def cancel(self) -> None:
-        self.closed = True
-        for message in self.outbound:
-            if message.state in ("queued", "armed", "waiting", "backoff", "busy_wait"):
-                message.state = "cancelled"
-                message.deadline = None
-
-    def resume(self) -> None:
-        self.closed = False
-
-    def on_event(self, event: FrameEvent, now_ms: int) -> RxResult:
+    def _on_event(self, event: FrameEvent, now_ms: int) -> RxResult:
         if event.kind == "bad_crc":
             self.bad_crc += 1
             return RxResult(["拒收 坏 CRC。不回复 ACK，不计入唯一收包。"])
@@ -300,28 +406,40 @@ class NodeEngine:
         return RxResult([f"拒收 {event.reason}。不回复 ACK。"])
 
     def summary(self) -> str:
-        holes = self.sequence_holes()
-        hole_text = "无" if not holes else ",".join(
-            f"{source}-{boot}-{seq}" for (source, boot), seq in holes
-        )
+        spans, omitted = self.hole_spans()
+        if not spans:
+            hole_text = "无"
+        else:
+            hole_text = "；".join(
+                f"{item.source}-{item.boot} 缺{item.start}..{item.end}共{item.count}"
+                for item in spans
+            )
+            if omitted:
+                hole_text += f"；另有{omitted}段未列出"
         rtt_text = "无" if not self.rtt_ms else ",".join(str(item[1]) for item in self.rtt_ms)
         return (
             f"唯一收下 {len(self.accepted_ids)}。"
-            f"同一 source+boot 的序号空洞：{hole_text}（不是无线丢包，不含坏 CRC，不跨 boot）。"
+            f"序号空洞只按仍保留的编号：{hole_text}（不是无线丢包，不含坏 CRC，不跨 boot）。"
             f"重复 {self.duplicates}。"
             f"本机时钟本跳 RTT ms：{rtt_text}（不是单程，不用对端时间）。"
         )
 
-    def sequence_holes(self) -> list[tuple[tuple[int, int], int]]:
+    def hole_spans(self, max_spans: int = 8) -> tuple[list[HoleSpan], int]:
+        """Gap ranges from stored ids only. The missing count is arithmetic."""
         groups: dict[tuple[int, int], set[int]] = {}
         for source, boot, seq in self.accepted_ids:
             groups.setdefault((source, boot), set()).add(seq)
-        holes: list[tuple[tuple[int, int], int]] = []
-        for key, seqs in groups.items():
-            for seq in range(min(seqs), max(seqs) + 1):
-                if seq not in seqs:
-                    holes.append((key, seq))
-        return holes
+        spans: list[HoleSpan] = []
+        for source, boot in sorted(groups):
+            ordered = sorted(groups[(source, boot)])
+            for left, right in zip(ordered, ordered[1:]):
+                if right > left + 1:
+                    start = left + 1
+                    end = right - 1
+                    spans.append(HoleSpan(source, boot, start, end, end - start + 1))
+        if max_spans < 1:
+            return [], len(spans)
+        return spans[:max_spans], max(len(spans) - max_spans, 0)
 
     def _new_outbound(self, text: str, now_ms: int, *, reliable: bool) -> _Outbound:
         payload = text.encode("utf-8")
@@ -387,7 +505,7 @@ class NodeEngine:
             age = age_at(0, message.anchor_ms, now_ms)
             if age >= self.limits.lifetime_ms or message.wire_hop > self.limits.hop_limit:
                 message.state = "failed"
-                self.lines.append(f"本地已过期或跳数用尽 id={message.message_id}。不再发送，不是送达。")
+                self._note(f"本地已过期或跳数用尽 id={message.message_id}。不再发送，不是送达。")
                 continue
             frame = self._encode(message, now_ms)
             message.state = "armed"
@@ -398,13 +516,13 @@ class NodeEngine:
         if message.sends >= 1 + self.limits.max_retries:
             message.state = "failed"
             message.deadline = None
-            self.lines.append(
+            self._note(
                 f"有限重试结束 id={message.message_id}。本跳未确认。端到端未知。"
             )
             return
         message.state = "backoff"
         message.deadline = now_ms + self.limits.retry_backoff_ms
-        self.lines.append(f"ACK 超时，稍后重传原编号 id={message.message_id}，hop 不增加。")
+        self._note(f"ACK 超时，稍后重传原编号 id={message.message_id}，hop 不增加。")
 
     def _fail_or_backoff(self, message: _Outbound, now_ms: int, line: str) -> list[str]:
         if message.sends >= 1 + self.limits.max_retries:
@@ -427,20 +545,27 @@ class NodeEngine:
         while len(self.recent_writes) > self.limits.cache_limit:
             self.recent_writes.popitem(last=False)
 
+    def _note(self, line: str) -> None:
+        self.lines.append(line)
+        cap = max(self.limits.cache_limit, 1) * 4
+        if len(self.lines) > cap:
+            del self.lines[: len(self.lines) - cap]
+
     def _trim_history(self) -> None:
-        limit = self.limits.cache_limit
+        limit = max(self.limits.cache_limit, 1)
         if len(self.rtt_ms) > limit:
             del self.rtt_ms[: len(self.rtt_ms) - limit]
         cap = limit * 4
         if len(self.accepted_ids) > cap:
             del self.accepted_ids[: len(self.accepted_ids) - cap]
+        if len(self.lines) > cap:
+            del self.lines[: len(self.lines) - cap]
         active_states = {"queued", "armed", "waiting", "backoff", "busy_wait"}
-        if len(self.outbound) <= limit:
-            return
         active = [item for item in self.outbound if item.state in active_states]
         done = [item for item in self.outbound if item.state not in active_states]
-        room = max(limit - len(active), 0)
-        self.outbound = done[-room:] + active
+        room = limit - len(active)
+        kept_done = [] if room <= 0 else done[-room:]
+        self.outbound = kept_done + active
 
     def _purge(self, now_ms: int) -> None:
         expired = [key for key, item in self.held.items() if item.expired(now_ms)]
@@ -456,7 +581,12 @@ class NodeEngine:
         if ack.status not in STATUS_NAME:
             return [f"未知 ACK status={ack.status} id={message_id}。不作为成功。端到端未知。"]
         message = self._find(message_id)
-        if message is not None and message.state in ("waiting", "backoff", "busy_wait", "queued"):
+        open_attempt = (
+            message is not None
+            and message.full_write_ms is not None
+            and message.state in ("waiting", "backoff", "busy_wait", "queued", "armed")
+        )
+        if open_attempt and message is not None:
             return self._apply_status(message, ack.status, now_ms)
         written = self.recent_writes.get(message_id)
         if written is not None and ack.status in (STATUS_ACCEPTED, STATUS_ALREADY_HAVE):
