@@ -1,12 +1,13 @@
 # 测试记录
 
-C 负责实验口径和统计，各方向保存自己的原始证据；目前尚无已核验测试结果。
+C 负责实验口径和统计，各方向保存自己的原始证据。2026-11-18 有一次 4 帧 DATA/CRC 小样本，见下面的原始包和核算。批量无线统计仍然没有。
 
 步骤和空白模板（无线测试还没有实测数据，不要据此勾选无线任务）：
 
 - [两节点无线测试步骤](两节点无线测试步骤.md)（[#3](https://github.com/China-wzy41/MobiWeave-Protocol/issues/3)，尚未执行）
 - [串口记录模板](串口记录模板.md)（[#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2) 的 A 部分，仍是空白骨架）
 - [2026-11-17 工程日志](../docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)：当天成果和注意事项
+- [2026-11-18 原始包](raw/2026-11-18-two-node-data-crc/README.md) · [核算](analysis/2026-11-18-two-node-data-crc.md) · [团队日志](../docs/ProjectLog/TeamLog/2026-11-18-双节点LoRa互传与DATA-CRC验证.md)
 - [板1、板2](../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)：两块成功 ESP 的接法和读回。不是无线互传记录，也没有填进上面的空白模板
 
 实际产生数据时使用以下结构，无需先堆空目录：

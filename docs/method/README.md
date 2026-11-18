@@ -8,7 +8,11 @@
 
 已记录：两块 ESP32 经 UART 完成 Entry AT、AT OK 和 AT+HELP 读回。命令带明确的 CR/LF。供电是 PJ15 只给 LoRa 5V，ESP 自己 USB，固定共地。
 
-尚未做成，因此下面的方法仍然待执行：第三套稳定启动、RF 合规参数写入与读回、RSSI 采集、两节点无线互传、三轮 1000 包、三节点携带、他人独立复现。读回仍是 LEVEL2 / 433.15 MHz 信道 00 / 22 dBm，不是已写入的 `AT+POWE10`、`AT+LEVEL3`、`AT+CHANNEL01`。不记录 SNR。N16R8/N8R8、PCB V1.3/V1.4 与板1、板2 没有对应关系。
+截至这一天尚未做成，因此下面的方法仍然待执行：第三套稳定启动、RSSI 采集、三轮 1000 包、三节点携带、他人独立复现。当天读回仍是 LEVEL2 / 433.15 MHz 信道 00 / 22 dBm。不记录 SNR。N16R8/N8R8、PCB V1.3/V1.4 与板1、板2 没有对应关系。
+
+## 2026-11-18 的小样本
+
+[团队日志](../ProjectLog/TeamLog/2026-11-18-双节点LoRa互传与DATA-CRC验证.md)记录用户当天的短文字和 4 帧 DATA/CRC。两端重启后读回是 MODE0、LEVEL3、SLEEP2、CH01、10 dBm。原始字节在 [raw](../../Tests/raw/2026-11-18-two-node-data-crc/README.md)，核算在 [analysis](../../Tests/analysis/2026-11-18-two-node-data-crc.md)。没有 ACK，也没有三轮 1000 包。
 
 ## 所有实验先保存这些
 

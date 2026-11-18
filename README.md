@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**M0 首轮准备，统一截止 2026-11-30。** 先完成软件模拟和一次上位机演示。原先 LoRa 暂按尚未到货安排，实物验收按可用节点就绪时间调整。2026-11-17 的[当天工程日志](docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)是成果和注意事项：两块 ESP32 的电脑—LoRa UART/AT 已通，见[板1、板2](Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)。无线互传、协议帧和他人验收仍未做。这次串口记录不替代实物验收，也不表示主干已更新。
+**M0 首轮准备，统一截止 2026-11-30。** 先完成软件模拟和一次上位机演示。原先 LoRa 暂按尚未到货安排，实物验收按可用节点就绪时间调整。2026-11-17 的[当天工程日志](docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)是成果和注意事项：两块 ESP32 的电脑—LoRa UART/AT 已通，见[板1、板2](Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)。2026-11-18 的[团队日志](docs/ProjectLog/TeamLog/2026-11-18-双节点LoRa互传与DATA-CRC验证.md)记录了用户操作的短文字和 4 帧 DATA/CRC。那次没有 ACK，也不是可靠性验收，改动还没有进入主干。他人验收仍未做。
 
 截至 2026-10-31，仓库仍处于准备阶段，尚无已核验可运行的完整系统；目录和任务建立不代表功能已完成。目前没有统一启动命令，后续各方向交付时补充运行说明。
 
@@ -29,5 +29,6 @@ B 统一格式；A 提供板端数据；C 模拟和统计；D 接入、显示和
 - [协议与日志要求](docs/protocol/README.md) · [实验与验收方法](docs/method/README.md)
 - [硬件与固件](Firmware/README.md) · [上位机](Host/README.md) · [仿真](Simulation/README.md) · [测试记录](Tests/README.md)
 - [2026-11-17 串口联调日志](docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md) · [板1、板2](Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)（当天成果和注意事项；不是无线验收）
+- [2026-11-18 团队日志](docs/ProjectLog/TeamLog/2026-11-18-双节点LoRa互传与DATA-CRC验证.md) · [原始包](Tests/raw/2026-11-18-two-node-data-crc/README.md) · [核算](Tests/analysis/2026-11-18-two-node-data-crc.md)（4 帧 DATA/CRC；没有 ACK）
 
 模拟、实测和估计值分别标注。地图、轨迹和热力图后置；没有位置或测量数据时不展示虚构覆盖。
