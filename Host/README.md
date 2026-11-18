@@ -1,6 +1,6 @@
 # 上位机｜D 主责
 
-目前是目录与交付约定。`v1_data_smoke` 只是 DATA/CRC 冒烟界面，不是完整上位机，也没有在 LoRa 上验收。
+目前是目录与交付约定。`v1_data_smoke` 只是 DATA/CRC 冒烟界面，不是完整上位机。2026-11-18 的 4 帧记录在[团队日志](../docs/ProjectLog/TeamLog/2026-11-18-双节点LoRa互传与DATA-CRC验证.md)。
 
 |阶段|交付|任务|
 |---|---|---|
