@@ -14,11 +14,9 @@ from tkinter import ttk
 from v1frame import (
     TOOL_IDLE_TIMEOUT_S,
     StreamParser,
-    business_reject,
-    payload_text,
-    two_node_text,
 )
 from link import LinkSession, write_exact
+from reliable import LIMITS, BootStore, IdentityError, NodeEngine
 
 BAUD = 115200
 
@@ -58,8 +56,9 @@ class App(tk.Tk):
         self.title("DATA/CRC 冒烟测试（草案未冻结）")
         self.geometry("760x560")
         self.run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.sequence = 1
         self.session: LinkSession | None = None
+        self.engine: NodeEngine | None = None
+        self.engines: dict[int, NodeEngine] = {}
         self._build()
         self.after(50, self._drain)
         self.protocol("WM_DELETE_WINDOW", self._close)
@@ -85,21 +84,26 @@ class App(tk.Tk):
         self.message = ttk.Entry(send)
         self.message.pack(side="left", fill="x", expand=True)
         ttk.Button(send, text="发一条短消息", command=self._send_text).pack(side="left", padx=4)
+        ttk.Button(send, text="可靠发送", command=self._send_reliable).pack(side="left", padx=4)
         ttk.Button(send, text="发送坏 CRC 测试帧", command=self._send_bad).pack(side="left")
 
         self.status = ttk.Label(
             self,
             padding=8,
             text=(
-                f"DATA/CRC 冒烟测试。协议草案未冻结，没有 ACK/重传。"
-                f" run_id={self.run_id}。解析空闲 {TOOL_IDLE_TIMEOUT_S:.0f}s 只是本工具默认。"
+                f"DATA/CRC 与本跳 ACK 实验。草案未冻结。"
+                f" ACK 超时 {LIMITS.ack_timeout_ms} ms、最多再重试 {LIMITS.max_retries} 次、"
+                f"退避 {LIMITS.retry_backoff_ms} ms 只是本工具默认。"
+                f" run_id={self.run_id}。解析空闲 {TOOL_IDLE_TIMEOUT_S:.0f}s 也不是冻结超时。"
             ),
         )
         self.status.pack(fill="x")
+        self.stats = ttk.Label(self, padding=(8, 0), text="尚未连接。统计不是无线丢包率。")
+        self.stats.pack(fill="x")
         self.log = tk.Text(self, height=24, wrap="word")
         self.log.pack(fill="both", expand=True, padx=8, pady=4)
         self._refresh()
-        self._write_ui("本窗口没有本地回显。对方屏幕出现内容才算收到。")
+        self._write_ui("本窗口没有本地回显。当地应用交付只表示本机收下，不是端到端确认。")
 
     def _refresh(self) -> None:
         current = self.port.get()
@@ -147,21 +151,47 @@ class App(tk.Tk):
         except serial.SerialException as exc:
             self.status.configure(text=f"打开失败：{exc}")
             return
+        try:
+            engine = self._engine_for(node_id)
+        except IdentityError as exc:
+            try:
+                port.close()
+            except serial.SerialException:
+                pass
+            self.status.configure(text=str(exc))
+            return
         files = RunFiles(Path(__file__).resolve().parent / "logs", self.run_id, node_id)
         session = LinkSession(port, files, StreamParser(idle_s=TOOL_IDLE_TIMEOUT_S), node_id)
         self.session = session
+        self.engine = engine
         session.start(self._read_loop)
         self._set_node_locked(True)
         self.connect_button.configure(text="断开")
         self.status.configure(
             text=(
-                f"已连接 {name}，本机节点 {node_id}，对端 {self._peer()}。"
+                f"已连接 {name}，本机节点 {node_id}，对端 {self._peer()}，"
+                f"boot={engine.boot_counter}。"
                 "已尽量拉低 DTR/RTS；有的板子仍可能在打开端口时重启。"
-                "本工具不发送 AT，也不改射频。boot_counter 固定为 1，不保证跨重启唯一。"
+                "本工具不发送 AT，也不改射频。本跳 ACK 不是端到端交付。"
             )
         )
+        self._refresh_stats()
+
+    def _engine_for(self, node_id: int) -> NodeEngine:
+        engine = self.engines.get(node_id)
+        if engine is None:
+            store = BootStore(Path(__file__).resolve().parent / "state" / f"node-{node_id}")
+            boot = store.open_boot()
+            peer = 2 if node_id == 1 else 1
+            engine = NodeEngine(node_id, peer, boot, LIMITS)
+            self.engines[node_id] = engine
+        engine.resume()
+        return engine
 
     def _disconnect(self, because: str | None = None) -> None:
+        if self.engine is not None:
+            self.engine.cancel()
+            self.engine = None
         session = self.session
         self.session = None
         self._set_node_locked(False)
@@ -205,11 +235,11 @@ class App(tk.Tk):
                 session.push(("events", events))
             time.sleep(0.02)
 
-    def _send(self, frame: bytes, label: str) -> bool:
+    def _send(self, frame: bytes, label: str):
         session = self.session
         if session is None:
             self.status.configure(text="还没有连接。")
-            return False
+            return None
         outcome = write_exact(session.port.write, frame)
         accepted = frame[: outcome.accepted]
         files = session.files
@@ -232,91 +262,127 @@ class App(tk.Tk):
                 self.status.configure(
                     text=f"发送不完整（{outcome.accepted}/{len(frame)}），且日志写入失败：{exc}"
                 )
-            return outcome.complete
+            return outcome
         if outcome.complete:
             self._write_ui(f"已完整发送 {label}，{outcome.accepted} 字节。本机屏幕不会回显。")
-            return True
+            return outcome
         self._write_ui(
             f"发送不完整 {label}：只写出 {outcome.accepted}/{len(frame)} 字节。"
             f"{outcome.error or ''} 不能当成整帧已发出。"
         )
         self.status.configure(text="发送不完整，不能当成整帧已发出。")
-        return False
+        return outcome
+
+    def _clock(self) -> int:
+        return int(time.monotonic() * 1000)
+
+    def _require_engine(self) -> NodeEngine | None:
+        if self.session is None or self.engine is None:
+            self.status.configure(text="还没有连接。")
+            return None
+        return self.engine
+
+    def _emit(self, request, engine: NodeEngine) -> None:
+        outcome = self._send(request.frame, request.label)
+        if outcome is None:
+            return
+        now = self._clock()
+        for line in engine.note_write(
+            request, outcome.accepted, outcome.complete, outcome.error, now
+        ):
+            self._log_line(line)
+        self._refresh_stats()
 
     def _send_text(self) -> None:
+        engine = self._require_engine()
+        if engine is None:
+            return
         text = self.message.get()
         if text == "":
             self.status.configure(text="先输入一条短消息。")
             return
-        session = self.session
-        if session is None:
-            self.status.configure(text="还没有连接。")
-            return
         try:
-            encoded = text.encode("utf-8")
-            frame = two_node_text(session.node_id, self._peer(), self.sequence, text)
-        except ValueError as exc:
+            request = engine.submit_smoke(text, self._clock())
+        except (ValueError, IdentityError) as exc:
             self.status.configure(text=str(exc))
             return
-        if len(encoded) > 132:
-            self.status.configure(text="UTF-8 超过 132 字节，没有发送。")
+        self._emit(request, engine)
+
+    def _send_reliable(self) -> None:
+        engine = self._require_engine()
+        if engine is None:
             return
-        seq = self.sequence
-        if self._send(frame, f"DATA seq={seq}"):
-            self.sequence += 1
+        text = self.message.get()
+        if text == "":
+            self.status.configure(text="先输入一条短消息。")
+            return
+        try:
+            request = engine.submit_text(text, self._clock())
+        except (ValueError, IdentityError) as exc:
+            self.status.configure(text=str(exc))
+            return
+        if request is None:
+            self._write_ui("已排队，等当前这一条的本跳确认或超时后再发。")
+        else:
+            self._emit(request, engine)
+        self._flush_engine()
 
     def _send_bad(self) -> None:
-        if self.session is None:
-            self.status.configure(text="还没有连接。")
+        engine = self._require_engine()
+        if engine is None:
             return
-        seq = self.sequence
-        frame = two_node_text(
-            self.session.node_id, self._peer(), seq, "BAD-CRC", bad_crc=True
-        )
-        if self._send(frame, f"坏CRC测试 seq={seq}"):
-            self.sequence += 1
+        try:
+            request = engine.submit_bad_crc("BAD-CRC", self._clock())
+        except (ValueError, IdentityError) as exc:
+            self.status.configure(text=str(exc))
+            return
+        self._emit(request, engine)
 
     def _drain(self) -> None:
         session = self.session
-        if session is not None:
+        engine = self.engine
+        if session is not None and engine is not None:
             for kind, payload in session.take():
                 if kind == "error":
                     self.status.configure(text=f"串口读失败：{payload}")
                     self._disconnect(because=f"串口读失败：{payload}")
                     break
                 for event in payload:
-                    self._show_event(session, event)
+                    result = engine.on_event(event, self._clock())
+                    for line in result.lines:
+                        self._log_line(line)
+                    if result.ack:
+                        self._send(result.ack, result.ack_label)
+            self._flush_engine()
         self.after(50, self._drain)
 
-    def _show_event(self, session: LinkSession, event) -> None:
-        files = session.files
-        local_id = session.node_id
-        if event.kind == "crc_ok" and event.fields is not None:
-            reason = business_reject(event.fields, local_id)
-            if reason is None:
-                line = (
-                    f"有效帧 seq={event.fields.sequence} "
-                    f"sender={event.fields.sender_id} receiver={event.fields.receiver_id} "
-                    f"src={event.fields.source_id} dest={event.fields.destination_id} "
-                    f"crc=0x{event.crc:04X} text={payload_text(event.fields)}"
-                )
-            else:
-                line = f"拒收 {reason} seq={event.fields.sequence} crc=0x{event.crc:04X}"
-        elif event.kind == "bad_crc":
-            line = "拒收 坏 CRC"
-        elif event.kind == "bad_length":
-            line = f"拒收 {event.reason}"
-        elif event.kind == "timeout":
-            line = f"未收齐，已放弃：{event.reason}"
-        elif event.kind == "ignored_ack":
-            line = "收到 ACK 帧，本工具不处理确认"
-        else:
-            line = f"拒收 {event.reason}"
+    def _flush_engine(self) -> None:
+        session = self.session
+        engine = self.engine
+        if session is None or engine is None:
+            return
+        now = self._clock()
+        for request in engine.poll(now):
+            self._emit(request, engine)
+        for line in engine.take_lines():
+            self._log_line(line)
+        self._refresh_stats()
+
+    def _log_line(self, line: str) -> None:
         self._write_ui(line)
-        if files is not None:
-            seq = event.fields.sequence if event.fields is not None else ""
-            files.events.write(f"{_now()} RX {line} seq={seq}\n")
-            files.events.flush()
+        session = self.session
+        if session is None:
+            return
+        try:
+            session.files.events.write(f"{_now()} {line}\n")
+            session.files.events.flush()
+        except OSError as exc:
+            self.status.configure(text=f"日志写入失败：{exc}")
+
+    def _refresh_stats(self) -> None:
+        if self.engine is None:
+            return
+        self.stats.configure(text=self.engine.summary())
 
     def _write_ui(self, line: str) -> None:
         self.log.insert("end", line + "\n")

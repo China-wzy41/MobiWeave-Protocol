@@ -1,7 +1,8 @@
-"""DATA frame codec for the unfrozen MobiWeave V1 draft.
+"""DATA and ACK frame codec for the unfrozen MobiWeave V1 draft.
 
-Field layout follows docs/protocol/protocol-v1.md on main.
-This module does not implement ACK, retry, cache, or deduplication.
+Field layout follows docs/protocol/protocol-v1.md.
+Retry, cache, and deduplication live in reliable.py.
+Timeout, retry, and backoff numbers are not taken from the draft.
 """
 
 from __future__ import annotations
@@ -16,7 +17,18 @@ FRAME_ACK = 2
 MAX_BODY = 160
 MAX_FRAME = 8 + MAX_BODY
 DATA_HEAD = 28
+ACK_BODY = 15
 MAX_PAYLOAD = 132
+STATUS_ACCEPTED = 0
+STATUS_ALREADY_HAVE = 1
+STATUS_BUSY = 2
+STATUS_EXPIRED = 3
+STATUS_NAME = {
+    STATUS_ACCEPTED: "ACCEPTED",
+    STATUS_ALREADY_HAVE: "ALREADY_HAVE",
+    STATUS_BUSY: "BUSY",
+    STATUS_EXPIRED: "EXPIRED",
+}
 # Tool experiment only. The draft says the parse timeout is not frozen.
 TOOL_IDLE_TIMEOUT_S = 1.0
 
@@ -119,6 +131,35 @@ def two_node_text(
 
 
 @dataclass(frozen=True)
+class AckFields:
+    sender_id: int
+    receiver_id: int
+    source_id: int
+    boot_counter: int
+    sequence: int
+    status: int
+
+
+def encode_ack(fields: AckFields, *, bad_crc: bool = False) -> bytes:
+    body = struct.pack(
+        "<HHHIIB",
+        fields.sender_id,
+        fields.receiver_id,
+        fields.source_id,
+        fields.boot_counter,
+        fields.sequence,
+        fields.status,
+    )
+    if len(body) != ACK_BODY:
+        raise ValueError("ACK body must be 15 bytes")
+    covered = struct.pack("<BBH", VERSION, FRAME_ACK, len(body)) + body
+    crc = crc16_ibm3740(covered)
+    if bad_crc:
+        crc ^= 0x00FF
+    return MAGIC + covered + struct.pack("<H", crc)
+
+
+@dataclass(frozen=True)
 class FrameEvent:
     kind: str
     frame: bytes
@@ -126,6 +167,7 @@ class FrameEvent:
     fields: DataFields | None = None
     crc: int | None = None
     text: str | None = None
+    ack: AckFields | None = None
 
 
 class StreamParser:
@@ -199,7 +241,11 @@ class StreamParser:
             return True
         del self.buf[:need]
         if frame_type == FRAME_ACK:
-            events.append(FrameEvent("ignored_ack", frame, "收到 ACK，本工具不处理确认", crc=actual))
+            ack = _parse_ack_body(frame[6:-2])
+            if isinstance(ack, str):
+                events.append(FrameEvent("bad_length", frame, ack, crc=actual))
+            else:
+                events.append(FrameEvent("ack", frame, "ACK", ack=ack, crc=actual))
             return True
         fields = _parse_data_body(frame[6:-2])
         if isinstance(fields, str):
@@ -230,6 +276,22 @@ def _parse_data_body(body: bytes) -> DataFields | str:
         hop_limit=head[10],
         payload_type=head[11],
         payload=payload,
+    )
+
+
+def _parse_ack_body(body: bytes) -> AckFields | str:
+    if len(body) != ACK_BODY:
+        return "ACK 正文长度不是 15"
+    sender_id, receiver_id, source_id, boot_counter, sequence, status = struct.unpack(
+        "<HHHIIB", body
+    )
+    return AckFields(
+        sender_id=sender_id,
+        receiver_id=receiver_id,
+        source_id=source_id,
+        boot_counter=boot_counter,
+        sequence=sequence,
+        status=status,
     )
 
 
@@ -270,4 +332,7 @@ def payload_text(fields: DataFields) -> str:
 
 DOC_SOS_FRAME = bytes.fromhex(
     "A55A01011F000100020001000300070000000C000000020000000060EA0000010301534F53BAD0"
+)
+DOC_ACK_FRAME = bytes.fromhex(
+    "A55A01020F00020001000100070000000C00000000F082"
 )
