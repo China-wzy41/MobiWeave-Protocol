@@ -10,6 +10,7 @@ A 主责，B 配合协议，D 配合电脑串口。尚无已核验可构建的�
 - [2026-11-17 工程日志](../docs/experiments/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)：当天成果和注意事项。
 - [板1、板2](hardware/2026-11-17-ESP32-LoRa成功板记录.md)：按成功时间编号。COM 号不是永久身份。
 - [开发环境与烧录](hardware/开发环境与烧录.md)：Windows 与 Arduino IDE 的板级选项、烧录和串口监视。第三套循环复位没有在这里写成已修复。
+- [初次连接测试](初次连接测试/README.md)：2026-11-17 板1、板2 串口 AT 用过的程序，从 `LoRa_AT_Test_v2.ino` 原样保存。UART 通过不是无线通过。
 - [gateway](gateway/README.md)：网关板端，电脑端放 Host。
 - [固定节点](nodes/fixed%20nodes/README.md)：节点收发、缓存与转发。
 - 串口记录和到货后的两节点步骤在 [Tests](../Tests/README.md)。
