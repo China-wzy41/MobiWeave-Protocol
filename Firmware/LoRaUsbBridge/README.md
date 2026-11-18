@@ -6,12 +6,13 @@
 
 ## 烧录菜单
 
-用上次 AT 成功的那个 USB 口，不要为了这个程序换线。
+开发板选 ESP32S3 Dev Module。已保存的 `初次连接测试` 注释写的是 USB CDC On Boot disabled。若烧那份程序时菜单没改过，本桥同样选 Disabled，并继续用当时能看到 AT 菜单的那个口。当时具体是哪一个 USB 座没有单独核实，不要因此改口。
 
-- 开发板：ESP32S3 Dev Module
-- USB CDC On Boot：**Disabled**。这时 `Serial` 走板载 USB 转串口（UART0），也就是设备管理器里原来的那个 COM。
-- 不要把程序改成 `while (!Serial)`。CDC 关闭时不需要等 USB 枚举；打开时这种等待会在监视器没开时一直停住。
-- 若改插标着 USB-OTG 的口，才需要把 USB CDC On Boot 设为 Enabled。本说明不要求这么做。
+- 板载 USB 转串口（UART0）那个口：USB CDC On Boot 选 **Disabled**。这时 `Serial` 是 `HardwareSerial`（UART0）。
+- 原生 USB 口：USB CDC On Boot 选 **Enabled**。USB Mode 为 Hardware CDC and JTAG 时 `Serial` 是 `HWCDC`；为 USB-OTG (TinyUSB) 时 `Serial` 是 `USBCDC`。口和菜单要配套，否则监视器没有字节。
+- 程序不使用 `while (!Serial)`，监视器没打开时也不会停在 `setup`。
+
+以上四种菜单组合都已用 esp32 核心 3.3.13 编译通过。`setRxBufferSize` 在这三种 `Serial` 上都有，并在 `begin` 之前调用。
 
 波特率写在 `LoRaUsbBridge.ino` 开头的 `kUsbBaud` 和 `kLoraBaud`。引脚是 `kLoraRxPin`、`kLoraTxPin`。
 
