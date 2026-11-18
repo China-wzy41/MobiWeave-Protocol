@@ -19,4 +19,4 @@
 - [Semtech LoRa Calculator](https://www.semtech.com/design-support/lora-calculator)：参数与空口时长核算起点，须对照实际模块。
 - [NIST 数字孪生可信度方法](https://www.nist.gov/publications/credibility-consideration-digital-twins-manufacturing)：作为方法参考，不是本系统有效的证据。
 
-评价口径、强基线和消融见[实验方法](../experiments/README.md)。组合现有技术本身不证明原创；保留正结果、负结果与适用边界。
+评价口径、强基线和消融见[实验方法](../method/README.md)。组合现有技术本身不证明原创；保留正结果、负结果与适用边界。

@@ -46,7 +46,7 @@ M1 要写清超时、有限重试、重试耗尽原因、重复与乱序行为�
 |事件|创建、发送、接收、缓存、转发、交付、过期、丢弃、失败及原因|
 |状态|队列状态、无线参数、接收观测、已知的电量和位置|
 
-RSSI/SNR 属于接收观测，不是发送前已知的业务必填值，也不是已定义的帧字段。没有测量就写 unknown/null；模拟值必须标明模拟。没有电量/定位测量时不要补造数据。日志本身也消耗传输资源，后期应计入开销。对本模块不记录 SNR，原因：DX-LR22 仅开放 RSSI（`AT+DRSSI1`），无 SNR 指令。见[硬件清单](../../Firmware/hardware/硬件清单与接线.md)。[#3](https://github.com/China-wzy41/MobiWeave-Protocol/issues/3) 原文中的「RSSI/SNR 分布」仍写在[实验方法](../experiments/README.md)里，issue 正文不改。
+RSSI/SNR 属于接收观测，不是发送前已知的业务必填值，也不是已定义的帧字段。没有测量就写 unknown/null；模拟值必须标明模拟。没有电量/定位测量时不要补造数据。日志本身也消耗传输资源，后期应计入开销。对本模块不记录 SNR，原因：DX-LR22 仅开放 RSSI（`AT+DRSSI1`），无 SNR 指令。见[硬件清单](../../Firmware/hardware/硬件清单与接线.md)。[#3](https://github.com/China-wzy41/MobiWeave-Protocol/issues/3) 原文中的「RSSI/SNR 分布」仍写在[实验方法](../method/README.md)里，issue 正文不改。
 
 ## 交付样例
 
@@ -54,4 +54,4 @@ RSSI/SNR 属于接收观测，不是发送前已知的业务必填值，也不�
 
 B 给出预期行为，C 用模拟核对，A 用板端核对，D 用同一组样例做显示与保存。格式变更记录版本和迁移方式；串口、模拟、无线只换输入适配，不另建冲突协议。
 
-相关要求：[实验方法](../experiments/README.md)。阅读起点由 [研究任务](../research/README.md) 管理。
+相关要求：[实验方法](../method/README.md)。阅读起点由 [研究任务](../research/README.md) 管理。

@@ -6,4 +6,4 @@
 
 后续 [#15](https://github.com/China-wzy41/MobiWeave-Protocol/issues/15) 做实测校准、回放、误差验证与策略比较；[#16](https://github.com/China-wzy41/MobiWeave-Protocol/issues/16) 做预测验证。D 的拓扑展示属于 Host，不代替模型可信度验证。
 
-交付时补环境、依赖、运行命令、输入输出位置和预期结果。工具放本目录，运行证据放 [Tests](../Tests/README.md)。格式见[协议](../docs/protocol/README.md)，方法见[实验说明](../docs/experiments/README.md)。模拟不作为实物通过证据。
+交付时补环境、依赖、运行命令、输入输出位置和预期结果。工具放本目录，运行证据放 [Tests](../Tests/README.md)。格式见[协议](../docs/protocol/README.md)，方法见[实验说明](../docs/method/README.md)。模拟不作为实物通过证据。

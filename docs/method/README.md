@@ -4,7 +4,7 @@
 
 ## 2026-11-17 已有的实物记录
 
-[工程日志](2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)是当天成果和注意事项。[板1、板2](../../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md) 只按 ESP 链路首次成功时间编号。
+[工程日志](../ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)是当天成果和注意事项。[板1、板2](../../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md) 只按 ESP 链路首次成功时间编号。
 
 已记录：两块 ESP32 经 UART 完成 Entry AT、AT OK 和 AT+HELP 读回。命令带明确的 CR/LF。供电是 PJ15 只给 LoRa 5V，ESP 自己 USB，固定共地。
 
