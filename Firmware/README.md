@@ -3,7 +3,7 @@
 A 主责，B 配合协议，D 配合电脑串口。已有板内自测草图及空口联调草图，正式节点固件仍未完成。
 
 - [板内自测](tests/MobiWeave_Stream_Timeout_Test/MobiWeave_Stream_Timeout_Test.ino)：CRC、DATA 编解码、流式解析与模拟时间超时测试；负责人报告板端通过。
-- [空口联调](tests/MobiWeave_Link_Test/README.md)：真实串口和无线链路准备程序，尚无仓库实测记录。
+- [空口联调](tests/MobiWeave_Link_Test/README.md)：真实串口和无线链路准备程序；实测记录见 [2026-11-21 空口联调记录](../Tests/hardware-bringup-2026-11-21.md)。
 - 两份草图各自独立打开，不应合并到同一个 Arduino 草图目录。
 
 先交付硬件型号/数量清单、官方资料来源、供电与接线说明、开发环境、构建/烧录步骤和串口记录。引脚以实际模块为准，未知项填待确认。ESP32 与 LoRa 已购买，当前实际到货数量与其他硬件状态待负责人更新；不假定数量和型号。

@@ -29,8 +29,11 @@
 | message_id | object 或 null | 可可信关联时为 source_id、boot_counter、sequence；不能可信解析时为 null |
 | event | string | 下表固定事件名 |
 | result | string | OK / REJECTED / RETRY / FAILED / INFO |
-| reason | string 或 null | 正常通常为 null；错误、拒绝、重试必须使用原因码 |
+| reason | string 或 null | result=OK 时必须为 null；REJECTED / RETRY / FAILED 必须使用原因码；INFO 为 null |
 | details | object | 事件参数；无附加信息用 {} |
+| channel | string | 事件所属物理通道：`uart0` 为 USB 调试口，`uart1` 为 LoRa 串口，其他通道另行约定。对 DATA_TX、ACK_TX、MESSAGE_FORWARDED、DATA_RX、ACK_RX、FRAME_REJECTED、STREAM_TIMEOUT、LINK_UP、LINK_DOWN 必填；其余事件可省略 |
+
+channel 用于把事件归属到某一对节点/某一条串口。多串口上位机必须据此区分，不能只按 COM 口顺序猜。channel 不是 node_id，也不是模块地址。
 
 message_id 中 source_id 为 1～65534，boot_counter、sequence 为 1～4294967295。日志编号本身不代替持久化消息编号方案。
 
@@ -38,9 +41,11 @@ session_id 可采用主机分配的唯一会话标记，或已可靠递增的节
 
 同节点允许同毫秒多个事件，用 event_seq 排序。重启必须换 session_id。板端若使用 32 位 millis()，应扩展回绕或在回绕前切新日志会话，不能将回绕后的值直接记为单调时间。
 
+event_seq 在**同一个 session_id 内**唯一并从 1 递增；不同 run 或不同会话之间可以重复。session_id 本身在 (run_id, source_kind, node_id) 内唯一，因此同一 session_id 不得跨 run 复用，但同一节点在不同 run 里出现同名会话本身不构成错误。
+
 ## 3. 事件与语义
 
-除 BOOT、FRAME_REJECTED、STREAM_TIMEOUT 外，下列事件要求 message_id 非 null。
+除 BOOT、FRAME_REJECTED、STREAM_TIMEOUT、LINK_UP、LINK_DOWN 外，下列事件要求 message_id 非 null。链路事件不对应具体消息，只带 peer_id。
 
 | event | result | details 必填内容 | 何时记录 |
 |---|---|---|---|
@@ -55,11 +60,17 @@ session_id 可采用主机分配的唯一会话标记，或已可靠递增的节
 | RETRY_SCHEDULED | RETRY | peer_id、attempt | 安排下一次尝试；attempt 是即将执行的尝试编号 |
 | MESSAGE_FORWARDED | OK | peer_id、attempt、frame_bytes、tx_scope | 中继已将转发帧交给底层，不等于下游确认 |
 | APP_DELIVERED | OK | destination_id | 最终目的节点的应用实际接受该消息，首次交付 |
-| MESSAGE_EXPIRED | REJECTED | 无 | 本地判定有效期已到 |
+| MESSAGE_EXPIRED | REJECTED | age_ms、lifetime_ms | 本地判定有效期已到；两个字段用于事后复核判据是否成立 |
 | MESSAGE_DROPPED | REJECTED | 无 | 按明确规则删除/拒绝消息 |
 | TRANSFER_FAILED | FAILED | peer_id、attempt | 本轮有限尝试终止，不自动等于永久丢失 |
 | FRAME_REJECTED | REJECTED | frame_type | 坏帧或业务无效；无法信任消息身份时 message_id=null |
-| STREAM_TIMEOUT | REJECTED | pending_bytes | 字节流候选超时；message_id=null |
+| STREAM_TIMEOUT | REJECTED | pending_bytes | 字节流候选超时；message_id=null。半帧可能不含完整帧头，禁止推断 peer_id |
+| LINK_UP | OK | peer_id、basis | 本跳链路由 DOWN 或 UNKNOWN 转为可用，仅在状态跳变时记录一次 |
+| LINK_DOWN | FAILED | peer_id、basis、consecutive_failures | 本跳链路由可用转为不可用，仅在状态跳变时记录一次 |
+
+LINK_UP 的 basis 取 `ack_ok` 或 `data_rx`；LINK_DOWN 的 basis 取 `ack_timeout` 或 `no_rx_timeout`。consecutive_failures 表示判定前连续失败次数，从 1 开始。
+
+链路事件是**本跳推断，不是物理层观测**。节点只能从「有 ACK/收到帧」推断链路可用，从「连续超时」推断链路中断；LoRa 透传模块不提供链路层状态回报。界面因此必须区分「观测到的断开」与「推断的断开」：前者来自显式失败事件，后者来自超时窗口。禁止把推断值回写成 REAL 观测。
 
 peer_id、destination_id 为 1～65534；attempt 从 1 开始，首次发送为 1，重试为 2、3……。DATA frame_bytes 为 36～168，ACK 为 23。pending_bytes 为非负整数。frame_type 为 DATA / ACK / UNKNOWN。
 
@@ -68,6 +79,21 @@ ack_status 使用 ACCEPTED / ALREADY_HAVE / BUSY / EXPIRED，与无线状态 0/1
 建议原因码：BAD_MAGIC、BAD_LENGTH、BAD_CRC、UNSUPPORTED_VERSION、UNSUPPORTED_TYPE、INVALID_ADDRESS、INVALID_MESSAGE_ID、INVALID_PRIORITY、INVALID_PAYLOAD_TYPE、INVALID_UTF8、HOP_LIMIT、ACK_TIMEOUT、ACK_MISMATCH、UNKNOWN_ACK_STATUS、BUFFER_FULL、EXPIRED、DUPLICATE、ID_CONFLICT、RETRY_LIMIT、STREAM_IDLE_TIMEOUT、IO_ERROR。新增原因码需记录兼容变更；读取端可展示未知码，但不自行解释为成功。
 
 DUPLICATE 表示禁止重复业务交付，不自动代表已删除已有副本。ALREADY_HAVE 仅在仍持有消息或交付记录时使用。普通 ACK、日志去重与最终应用去重是三件不同的事。
+
+### 3.1 链路三态与界面判据
+
+上位机显示「正常 / 断开 / 未知」时必须按下表判定，不得各自另算一套：
+
+| 显示 | 判据 | 证据性质 |
+|---|---|---|
+| 未知 | 该 (peer_id, channel) 从未出现任何事件 | 无数据 |
+| 正常 | 窗口内出现 HOP_CONFIRMED、LINK_UP，或该 peer 的 DATA_RX / ACK_RX | 观测 |
+| 断开（已确认） | 出现 LINK_DOWN 或 TRANSFER_FAILED，且此后没有成功事件 | 观测 |
+| 断开（推断） | 距最近成功事件超过 T_down 秒且期间无 LINK_UP | 推断 |
+
+T_down 由上位机配置并写入实验记录，协议不规定默认值。确认态与推断态在界面上必须可区分。
+
+STREAM_TIMEOUT 不作为链路判据：它只说明某个 channel 上的字节流断了，不能证明对端消失。因此 STREAM_TIMEOUT 不带 peer_id，也不会产生 LINK_DOWN。
 
 ## 4. 时间与测量
 
@@ -81,7 +107,11 @@ details 可增加 radio_config 对象，记录实际频段、信道、速率等�
 
 ## 5. 样例与验收
 
-[examples/log-v1-sim.jsonl](examples/log-v1-sim.jsonl) 是手工构造的 SIM 接口样例，不是已完成的 ACK/转发/无线测试。正常场景演示 1→2→3 及最终交付；另一 run_id 演示 ACK 超时后重试；第三场景演示坏 CRC 与半帧超时。
+[examples/log-v1-sim.jsonl](examples/log-v1-sim.jsonl) 是手工构造的 SIM 接口样例，覆盖正常三段转发、ACK 超时重试、坏帧与半帧超时三类场景。
+
+[examples/log-v1-extra.jsonl](examples/log-v1-extra.jsonl) 补齐其余事件：BOOT、MESSAGE_EXPIRED、MESSAGE_DROPPED、TRANSFER_FAILED，以及 BUSY/EXPIRED 的 ACK、FLASH 缓存、LINK_UP/LINK_DOWN 和一条 ESTIMATED 记录。
+
+两份样例都不是实测数据。字段是否符合本规范由 `tools/mwlog_check.py` 校验，不靠肉眼。
 
 验收要求：A 板端、C 仿真、D 上位机分别读取同一组样例，确认字段一致；上位机区分本跳确认和最终应用交付，不能将 DATA_TX/ACK_RX 自动显示为最终送达。原始日志完整保留，统计输出需注明来源和配置。
 
@@ -90,3 +120,16 @@ details 可增加 radio_config 对象，记录实际频段、信道、速率等�
 ## 6. 版本与迁移
 
 目前为 V1 候选，需 A/B/C/D 评审后记录冻结日期及提交号。旧草图人类可读输出保持为旧格式，不自动视为 V1。增加可选字段可保持版本 1；修改必填字段、类型、单位、事件含义或删除字段必须升版本并提供迁移说明。
+
+## 7. 修订记录
+
+2026-11-22（未冻结状态下的扩展，版本号仍为 1）：
+
+- 新增 `LINK_UP`、`LINK_DOWN` 事件与「正常 / 断开 / 未知」三态判据，解决上位机无法表达链路断开的问题。
+- 新增必填字段 `channel`，用于把事件归属到具体串口与链路；`STREAM_TIMEOUT` 因此可定位，但仍不推断 `peer_id`。
+- `MESSAGE_EXPIRED` 的 details 补 `age_ms`、`lifetime_ms`，使过期判据可事后复核。
+- 明确 `result=OK` 时 `reason` 必须为 null；此前「通常为 null」无法用于校验。
+- 明确 `event_seq` 在同一 `session_id` 内唯一，跨会话可重复。
+- 新增 `examples/log-v1-extra.jsonl` 覆盖缺失事件，新增 `tools/mwlog_check.py` 做机器校验。
+
+以上改动尚未被任何已实现代码使用，因此不构成破坏性变更；一旦板端开始输出，后续修改必须按第 6 节升版本。

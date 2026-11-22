@@ -187,6 +187,8 @@ USB=115200 LoRa=9600 TX=17 RX=18 M0=4 M1=5
 
 B 板：同上，但第一行是 `ROLE=B(receiver)`。
 
+紧接着会有一行 JSON，那是本次启动的 `BOOT` 事件（见第 11 节）。
+
 **看到这两段才算烧对了。** 看不到就查：USB CDC On Boot 有没有开、COM 口选没选对、波特率是不是 115200。
 
 串口监视器底部的“行尾”选哪个都行（`无`/`换行`/`回车`都可以），程序逐字符处理命令，忽略不支持的字符（包括行尾）。
@@ -378,10 +380,49 @@ git push origin Yanis0118-patch-1
 | 收到 `DROP crc` | 空中传输误码/波特率不稳 | 降空中速率、缩距离、查天线 |
 | B 侧 `pending` 一直是 9 | 半帧后没有后续字节 | 说明模块把帧截断了，看第 3 关结果 |
 
+## 11. 日志输出（JSONL）
+
+草图同时输出两种行：人类可读的调试行和 [日志 V1](../../../docs/protocol/log-v1.md) 的 JSONL 行。JSONL 行以 `{` 开头，调试行不是 JSON。
+
+当前只实现四个事件：
+
+| 事件 | 何时产生 | 关键字段 |
+|---|---|---|
+| `BOOT` | 上电或收到 `RUN` 命令后新开会话 | node_id、session_id |
+| `DATA_TX` | 每发出一帧 DATA | peer_id、attempt、frame_bytes、channel |
+| `DATA_RX` | 每成功解析一帧 DATA | peer_id、frame_bytes、channel |
+| `FRAME_REJECTED` | 帧头或 CRC 校验失败 | frame_type、原因码、channel |
+
+`node_id` 由 `MW_ROLE` 推出：A 板为 1，B 板为 2。
+
+### 设置 run_id
+
+`run_id` 必须由上位机下发，板端无法自己知道属于哪次实验：
+
+```
+RUN exp-2026-11-23-a
+```
+
+回显 `RUN_OK exp-2026-11-23-a`，同时开启新会话（换 `session_id`、`event_seq` 从 1 重新开始、补一条 `BOOT`）。
+未设置时 `run_id` 为 `unset`，按规范这类会话不得作为正式实验数据。
+
+### 只要 JSONL 时
+
+按 `v` 关闭人类可读行，串口只剩 JSONL。再按一次恢复。
+
+串口监视器启动时那几行 banner 是非结构化行，抓包里会保留；校验时它们按「非 JSON 行」跳过。
+
+### 校验
+
+```powershell
+python tools/mwlog_check.py capture.txt
+python tools/mwlog_check.py --strict capture.txt   # 要求整份文件全是 JSONL
+```
+
 ## 当前限制与联调前检查
 
 - 协议阶段（2/3）尚未实现半帧空闲超时，不能将旧自测代码的超时能力视为本草图已有功能。连续半帧测试前应补齐超时；首轮完整帧测试发现 pending 长期不归零时记录原始字节，停止统计，排查后重新开始独立轮次。
-- 正文合法性、实际缓存、ACK 回复和匹配、重传、去重、最终交付均未实现。
+- 正文合法性、实际缓存、ACK 回复和匹配、重传、去重、最终交付均未实现；日志也只输出上述四个事件，`ACK_TX`、`RETRY_SCHEDULED`、`LINK_UP` 等尚不存在。
 - 固定 boot_counter、sequence、age_ms 仅用于样例，不能证明重启编号不冲突或有效期正确累计。
 - 每秒发送是初始测试节奏，不代表模块能持续承受所有长度；长帧应先拉大发送间隔，结合实际速率、忙状态和缓冲测量调整。
 - 示例结果均为预期，不是实测；只将完成的测试写入带实际日期的记录。
