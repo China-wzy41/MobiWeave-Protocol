@@ -4,7 +4,7 @@
 
 - 开发板：ESP32-S3 N16R8，新更换的开发板
 - 开发环境：Arduino IDE
-- ESP32 支持包版本：填写实际版本
+- ESP32 支持包版本：3.3.12（依据当日 Arduino 界面记录；本次仅整理文档，未重新烧录）
 - USB CDC On Boot：Enabled
 - 串口监视器波特率：115200
 - 程序：Firmware/tests/MobiWeave_Stream_Timeout_Test/MobiWeave_Stream_Timeout_Test.ino
@@ -43,3 +43,9 @@
 - 业务字段完整合法性检查
 - 消息缓存、去重、有效期和转发策略
 - 断电持久化
+
+## 证据与状态
+
+- 仓库现有截图只直接展示完整 DATA 解析与错误拒绝四项 PASS。
+- 其他 PASS 根据负责人当日运行反馈记录，尚未附完整原始串口日志。
+- 本次整理未重复执行板端测试，不能将电脑端自测结果替代板端或无线结果。
