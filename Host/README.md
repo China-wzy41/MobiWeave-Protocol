@@ -116,8 +116,15 @@ python -m mwlog.selftest                   :: 只跑逻辑自检，不开界面
 |`samples/log-v1-extra.jsonl`|链路 `LINK_UP`/`LINK_DOWN`、过期、丢弃、失败等边界事件|16|
 |`samples/log-v1-with-bad-lines.jsonl`|上面 extra 的副本，**故意混入一条串口调试文本和一条缺字段 JSON**，用来演示坏行处理|18 行（16 有效）|
 
-三份样例都来自仓库的 `docs/protocol/examples/`（目前只在 `Yanis0118-patch-1` 分支上，main 还没有），
-内容是 SIM 模拟数据。
+前两份是**逐字节复制的仓库样例**，来源分支 `Yanis0118-patch-1`（main 上还没有这个目录），已核对一致：
+
+- [docs/protocol/examples/log-v1-sim.jsonl](https://github.com/China-wzy41/MobiWeave-Protocol/blob/Yanis0118-patch-1/docs/protocol/examples/log-v1-sim.jsonl)
+  —— 8317 字节，sha256 前 16 位 `a312be8cb57f13e5`
+- [docs/protocol/examples/log-v1-extra.jsonl](https://github.com/China-wzy41/MobiWeave-Protocol/blob/Yanis0118-patch-1/docs/protocol/examples/log-v1-extra.jsonl)
+  —— 6773 字节，sha256 前 16 位 `f0f896535057b15b`
+
+内容都是 SIM 模拟数据。以后样例进了 main 的 `docs/protocol/examples/`，可以把 `Host/samples/` 里的副本
+删掉、直接从那边打开（代码不用改，`打开日志…` 指到哪份都行）。
 
 ## 错误处理
 
