@@ -1,33 +1,23 @@
 # MobiWeave Protocol｜织网计划
 
-研究在通信断续、节点移动时，如何用 ESP32 与 LoRa 保存、携带和转发重要消息，并通过实验判断预测调度是否比固定规则更有效。
+户外徒步时，手机取得坐标，经低功耗蓝牙（BLE）交给无屏的 ESP32 + LoRa 节点，再发给队友的节点，由队友的手机显示位置、短文字和离线地图上的集合点。
 
-## 当前阶段
+这条整段都还要做出来并实地测试：手机取得坐标 → BLE → 本机无屏节点 → LoRa → 队友节点 → 队友手机显示。每一段都还没有实现，也还没有验证。没有蜂窝网络时手机仍可能定位，但权限、冷启动和天空遮挡还没测。
 
-**M0 首轮准备，统一截止 2026-11-30。** 先完成软件模拟和一次上位机演示。原先 LoRa 暂按尚未到货安排，实物验收按可用节点就绪时间调整。2026-11-17 的[当天工程日志](docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)是成果和注意事项：两块 ESP32 的电脑—LoRa UART/AT 已通，见[板1、板2](Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)。无线互传、协议帧和他人验收仍未做。这次串口记录不替代实物验收，也不表示主干已更新。
+方向于 2026-11-23 更新。当前计划见 [长期计划](docs/planning/长期计划.md)。
 
-截至 2026-10-31，仓库仍处于准备阶段，尚无已核验可运行的完整系统；目录和任务建立不代表功能已完成。目前没有统一启动命令，后续各方向交付时补充运行说明。
+## 已经有的记录
 
-## 五人分工
+- 2026-11-17 只打通了电脑—ESP32—LoRa 的串口 AT，不是上面任何一段。[工程日志](docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)、[板1、板2](Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)
+- v1 日志格式已冻结，工作基线在分支 `Yanis0118-patch-1`（`ca128e3`），不在 `main`。格式冻结、送进 main 的拉取请求、合入 main，以及确认、重试、去重、转发、多跳，各自单独记账。
 
-每人每周暂按 **8–10 小时**，其中约 **25% 留给学习和调试**。
+## 从这里进入
 
-|方向|11 月底交付|任务入口|
-|---|---|---|
-|A 硬件与集成|硬件清单、接线说明、串口记录、到货测试步骤|[#1](https://github.com/China-wzy41/MobiWeave-Protocol/issues/1)、[#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2)、[#3](https://github.com/China-wzy41/MobiWeave-Protocol/issues/3)|
-|B 通信协议|消息与日志字段、收发流程、正常与错误样例|[#6](https://github.com/China-wzy41/MobiWeave-Protocol/issues/6)|
-|C 数据／孪生／实验|研究问题、可重复模拟、测试记录与结果表|[#7](https://github.com/China-wzy41/MobiWeave-Protocol/issues/7)、[#8](https://github.com/China-wzy41/MobiWeave-Protocol/issues/8)|
-|D 上位机／可视化|节点列表、消息记录、连接状态、日志保存|[#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2)、[#20](https://github.com/China-wzy41/MobiWeave-Protocol/issues/20)|
-|E 项目／场景／市场|场景说明、赛事来源、资源表、访谈摘要|[#5](https://github.com/China-wzy41/MobiWeave-Protocol/issues/5)、[#9](https://github.com/China-wzy41/MobiWeave-Protocol/issues/9)|
+- [长期计划](docs/planning/长期计划.md)
+- [硬件与固件](Firmware/README.md)
+- [协议说明](docs/protocol/README.md)
+- [怎么验证](docs/method/README.md)
+- [测试记录](Tests/README.md)
+- [工程日志](docs/ProjectLog/README.md)
 
-B 统一格式；A 提供板端数据；C 模拟和统计；D 接入、显示和保存；E 汇总进度与需求。D 先用 C 的样例，硬件就绪后换成真实输入。
-
-## 从这里开始
-
-- [本月计划与交付方式](docs/planning/first-month.md) · [#1](https://github.com/China-wzy41/MobiWeave-Protocol/issues/1) 本月验收
-- [一年路线](docs/planning/roadmap.md) · [#4](https://github.com/China-wzy41/MobiWeave-Protocol/issues/4) 年度总控 · [里程碑](https://github.com/China-wzy41/MobiWeave-Protocol/milestones)
-- [协议与日志要求](docs/protocol/README.md) · [实验与验收方法](docs/method/README.md)
-- [硬件与固件](Firmware/README.md) · [上位机](Host/README.md) · [仿真](Simulation/README.md) · [测试记录](Tests/README.md)
-- [2026-11-17 串口联调日志](docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md) · [板1、板2](Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)（当天成果和注意事项；不是无线验收）
-
-模拟、实测和估计值分别标注。地图、轨迹和热力图后置；没有位置或测量数据时不展示虚构覆盖。
+队友手机上的显示和仿真目录里还没有可运行程序。

@@ -1,15 +1,9 @@
-# 上位机｜D 主责
+# 上位机
 
-目前是目录与交付约定，尚无可运行界面。
+当前要在队友手机上显示对方的位置和短文字，并在手机里预先下载的离线地图上看到集合点。地图瓦片不走 LoRa。这里还没有这个程序。
 
-|阶段|交付|任务|
-|---|---|---|
-|M0，2026-11-30|读取 C 的样例日志，显示节点、消息与连接状态，保存记录；准备串口接口|[#20](https://github.com/China-wzy41/MobiWeave-Protocol/issues/20)、[#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2)|
-|M1，2026-12-31|接入真实网关，按消息编号跟踪收到、保存、转发与最终交付|[#21](https://github.com/China-wzy41/MobiWeave-Protocol/issues/21)|
-|M3，2027-03-15|实验回放、逻辑拓扑和消息路径；未知、过期状态有提示|[#22](https://github.com/China-wzy41/MobiWeave-Protocol/issues/22)|
+开放中的 [PR 27](https://github.com/China-wzy41/MobiWeave-Protocol/pull/27) 是 USB 与 LoRa 字节桥试验，未合并，不是队友手机上的显示。
 
-B 统一格式，C 提供模拟/统计结果，A 提供板端输入，D 负责接入、显示、保存与回放操作。先文件回放，再串口；输入适配与界面分开。技术栈在任务内记录选择依据，不在此假装已安装或已运行。
+日志校验、统计和回放由 C（ygh）负责，不在界面里另算一套指标。没有真实位置或测量时，不要画看起来像实测覆盖的图。
 
-交付时补依赖版本、安装启动步骤、输入样例、预期界面、错误处理与已知限制；另一成员复现。原始日志保存到 Tests 对应 run_id。所有模拟值标明来源。
-
-地图、轨迹和热力图后置。没有位置或测量数据时只画逻辑关系，不能制作看似真实的覆盖图。详见[协议](../docs/protocol/README.md)与[实验方法](../docs/method/README.md)。
+格式说明见 [协议](../docs/protocol/README.md)。v1 样例不在 `main`。方向见 [长期计划](../docs/planning/长期计划.md)。

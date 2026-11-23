@@ -1,25 +1,20 @@
 # 测试记录
 
-C 负责实验口径和统计，各方向保存自己的原始证据；目前尚无已核验测试结果。
+无线测试还没有实测数据。已有记录和待执行步骤：
 
-步骤和空白模板（无线测试还没有实测数据，不要据此勾选无线任务）：
+- [2026-11-17 工程日志](../docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)
+- [板1、板2](../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)
+- [2026-11-16 协议自测](protocol-selftest-2026-11-16.md)：板上跑了帧解析自测，报文由程序内部构造，没有经过 LoRa。USB CDC On Boot 那次记的是 Enabled，与 11 月 17 日的 AT 测试不是同一次。
+- [两节点无线测试步骤](两节点无线测试步骤.md)：尚未执行。任何户外或外场使用前，先完成无线电核对，再配置 LoRa
+- [串口记录模板](串口记录模板.md)：空白骨架
 
-- [两节点无线测试步骤](两节点无线测试步骤.md)（[#3](https://github.com/China-wzy41/MobiWeave-Protocol/issues/3)，尚未执行）
-- [串口记录模板](串口记录模板.md)（[#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2) 的 A 部分，仍是空白骨架）
-- [2026-11-17 工程日志](../docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)：当天成果和注意事项
-- [板1、板2](../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)：两块成功 ESP 的接法和读回。不是无线互传记录，也没有填进上面的空白模板
-
-实际产生数据时使用以下结构，无需先堆空目录：
+产生数据时再使用：
 
 ```text
 Tests/
-  configs/             # 可复用配置
-  raw/<run_id>/        # 单次运行的原始日志与环境记录
-  analysis/<run_id>/   # 分析输出、图表及脚本版本说明
+  configs/
+  raw/<run_id>/
+  analysis/<run_id>/
 ```
 
-每次运行记录：REAL/SIM/ESTIMATED 来源、日期、人员、版本、硬件/环境、配置、随机种子、开始结束条件、预期和实际结果。失败也保留；原始文件不覆盖。大文件可放受控存储，记录固定版本、校验值和访问方式。
-
-执行步骤和指标见[实验方法](../docs/method/README.md)。日志格式由 [B 统一](../docs/protocol/README.md)，模拟工具放 [Simulation](../Simulation/README.md)，显示和保存工具放 [Host](../Host/README.md)。
-
-关闭任务前附复现步骤、证据路径、验收人和日期。不要把一次演示当成全部实验通过。
+每次写明 REAL、SIM 或 ESTIMATED。失败也保留，原始文件不覆盖。口径见 [怎么验证](../docs/method/README.md)。

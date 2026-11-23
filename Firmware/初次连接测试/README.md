@@ -6,6 +6,7 @@
 - PJ15 只给 LoRa 独立 5V。ESP32 用自己的 USB。固定共地，不把两路 5V 输出并在一起。
 - LoRa TXD → ESP GPIO18，LoRa RXD → ESP GPIO17。PJ15 的 TX/RX 断开。
 - 电脑 115200；LoRa 9600、8N1。
+- USB CDC On Boot：Disabled。程序开头的注释写明使用板子的 COM USB 口。
 - 输入数字 4 发送 `+++` 加 CR、LF，进入 AT；2 发送 `AT` 加 CR、LF，应返回 OK；3 发送 `AT+HELP` 加 CR、LF，读参数。
 - 监视器的行结束符不影响这些硬编码命令。选 NL/CR 不会自动改变菜单 1；菜单 1 仍只发三个加号。
 - 不改射频参数，不自动发送，不控制 M0/M1。
