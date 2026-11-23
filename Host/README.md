@@ -126,6 +126,40 @@ python -m mwlog.selftest                   :: 只跑逻辑自检，不开界面
 内容都是 SIM 模拟数据。以后样例进了 main 的 `docs/protocol/examples/`，可以把 `Host/samples/` 里的副本
 删掉、直接从那边打开（代码不用改，`打开日志…` 指到哪份都行）。
 
+## 对接验收：拿到新日志先跑这一条
+
+组员的新版 `.jsonl` 到手后，别急着看界面，先跑：
+
+```bat
+cd Host
+python -m mwlog.acceptance 新日志.jsonl
+python -m mwlog.acceptance 新日志.jsonl --verbose    :: 连每条事件一起打出来
+```
+
+它把每条消息的关键事实列成一张表（编号 / 状态 / DATA_TX 次数 / attempt 列表 / ACK 状态 /
+是否最终交付），再按 4 条规则判 PASS / FAIL：
+
+|规则|要求|为什么|
+|---|---|---|
+|R1|有发送 + 有「本跳 ACK」、没有最终交付 → 必须显示**本跳已确认**|任务 #20 的口径：ACK 只证明这一跳收到|
+|R2|同一个 message_id 的多次发送必须归在**一条**消息下，attempt 从 1 连续递增，最后是确认类状态|重发场景不能拆成两条消息|
+|R3|只有出现 `APP_DELIVERED` 才允许显示**已送达**|不能把「发出去」当「送到了」|
+|R4|没有**成功** ACK（`ACCEPTED` / `ALREADY_HAVE`）时，不能显示成已确认|`ACK` 里带 `EXPIRED`/`REJECTED` 也算失败，要落到「本轮失败」|
+
+FAIL 的表现就是：同一份日志，我这边显示的和组员预期的对不上。**处置办法是拿同一份日志逐行对照**，
+看是三件事里的哪一件：
+
+1. 日志本身的问题（少事件、`message_id` 不一致、attempt 编号乱）→ 找生成日志的人；
+2. 解析的问题（字段读错、事件名不认识）→ 看「问题行」页签，那里保留原文；
+3. 显示的问题（状态优先级排错）→ 看 `mwlog/state.py` 里 `MessageView.state` 的顺序。
+
+现在的基线（仓库样例）：
+
+```
+samples\log-v1-sim.jsonl     → 4 项 PASS（正常单跳 = 本跳已确认；重发 attempt [1,2] 归一条）
+samples\log-v1-extra.jsonl   → 1 项 PASS（ACK=EXPIRED 落成「本轮失败」，没冒充确认）
+```
+
 ## 错误处理
 
 |情况|表现|
