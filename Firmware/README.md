@@ -11,6 +11,6 @@
 - [初次连接测试](初次连接测试/README.md)：2026-11-17 用过的 AT 程序。这份 AT 记录是串口，不是两节点无线记录。
 - [芯路城 ESP32-S3 资料](hardware/vendor/xinlu-esp32s3/README.md)：普通 N16R8 图纸。新买的两块到货未确认，不是板1、板2。
 - [固定节点](<nodes/fixed nodes/README.md>)：目录还没有可运行程序。
-- 串口记录和尚未执行的无线步骤在 [Tests](../Tests/README.md)。
+- 串口记录、已有无线记录与待补验收步骤在 [Tests](../Tests/README.md)。
 
 方向见 [长期计划](../docs/planning/长期计划.md)。

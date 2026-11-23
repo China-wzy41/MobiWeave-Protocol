@@ -1,6 +1,6 @@
 # 测试记录
 
-整条手机链路还没有整段验证。ESP 与 LoRa 的实验台通信，以及两节点无线通信，在已有记录的条件内已经做过。确认、重试、去重、转发和多跳没有验收。已有记录和仍待执行的步骤：
+整条手机链路还没有整段验证。ESP 与 LoRa 的实验台通信已经做过。实验台两节点无线通信另有记录，在 hsr 分支 `Yanis0118-patch-1`，不在 `main`：[2026-11-21 空口联调](https://github.com/China-wzy41/MobiWeave-Protocol/blob/ca128e3d88589a5ef82af96bcf9f2ea97a2768ec/Tests/hardware-bringup-2026-11-21.md)。其中只有裸透传 LoRa 为 PASS。原始日志仍待补入。协议帧、确认、重试、去重、转发和多跳没有验收。已有记录和仍待执行的步骤：
 
 - [2026-11-17 工程日志](../docs/ProjectLog/A_wzy/2026-11-17-电脑-ESP32-S3-LoRa串口联调.md)
 - [板1、板2](../Firmware/hardware/2026-11-17-ESP32-LoRa成功板记录.md)
