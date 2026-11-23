@@ -94,7 +94,7 @@
 | 第 1 关 裸透传 | 杜邦线直连 | PASS：B 侧收到 `RX 7 bytes: 50 49 4E 47 20 31 0A` | 待补两端文本 |
 | 第 2 关 协议帧 | 杜邦线直连 | PASS：B 侧出现 `MATCH doc sample` | 待补 capture-stage2.txt |
 | 第 1 关 裸透传 | LoRa 空口 | PASS：B 侧稳定收到 PING | 待补两端文本 |
-| 第 2 关 协议帧 | LoRa 空口 | **未记录**（当轮反馈到此中断） | — |
+| 第 2 关 协议帧 | LoRa 空口 | **待核实**（当轮反馈未留下可核对的收帧证据） | — |
 | 第 3 关 长度上限 | — | 未执行 | — |
 
 到达率、`badCrc` 计数均未留存，因此**不能给出任何百分比**。
@@ -102,8 +102,8 @@
 ## 关键发现
 
 1. **`USB CDC On Boot` 必须设为 Disabled。** 该板只有一个 USB 座，经 CH340 接芯片 UART0。若设为 Enabled，`Serial` 指向原生 USB 引脚（本板未引出），现象是串口只有 `ESP-ROM:esp32s3-…` 引导日志、`entry 0x403c88b8` 之后一片空白；改回 Disabled 后程序日志与 ROM 日志同口可见。
-2. **码流分帧在真实链路上工作正常。** 39 字节帧经杜邦线和 LoRa 两种介质都能被完整解析，说明半帧拼接、帧头搜索、CRC 校验在真实时序下可用。
-3. **透传模块不改变应用字节。** 有线与 LoRa 两条路径收到的帧与 `protocol-v1.md` 第六节样例一致，为「只换介质、不改协议」提供了第一份实物依据。
+2. **39 字节协议帧已通过有线对照。** B 侧报告出现 `MATCH doc sample`，待补原始串口日志。
+3. **LoRa 空口已报告收到裸 PING。** 39 字节 SOS 帧的空口收发仍待核实，需补采 B 侧的 `MATCH doc sample` 和 CRC 统计。
 4. 首次上电曾误烧 `MobiWeave_Stream_Timeout_Test.ino`，其输出为 `=== MobiWeave CRC tests ===`，与联调草图的 `=== MobiWeave link test ===` 可据此区分。
 
 ## 未验证
