@@ -1,16 +1,16 @@
 # 工程日志
 
-这个目录只放工程日志。实验方法在 [method](../method/README.md)。原始实验数据仍放 `Tests/raw` 和 `Tests/analysis`，不要写进这里。
+这个目录只放工程日志。验证方法在 [怎么验证](../method/README.md)。原始实验数据仍放 `Tests/raw` 和 `Tests/analysis`，不要写进这里。当前方向见 [长期计划](../planning/长期计划.md)。
 
-每人一个文件夹，名字是角色字母加姓名缩写。这是暂时分工，以后可以改。角色职责来自仓库 [README](../../README.md) 的「五人分工」和 [11 月首轮计划](../planning/first-month.md)。称呼是团队确认的叫法。账号列是在本仓库直接共创者里核对后的登录名。
+每人一个文件夹，名字是角色字母加姓名缩写。这是暂时分工，以后可以改。称呼是团队确认的叫法。账号列是在本仓库直接共创者里核对后的登录名。
 
 | 目录 | 角色 | 职责 | 称呼 | 仓库账号 |
 |---|---|---|---|---|
 | [A_wzy](A_wzy/) | A | 硬件与集成 | wzy | [@China-wzy41](https://github.com/China-wzy41) |
 | [B_hsr](B_hsr/) | B | 通信协议 | yanis | [@Yanis0118](https://github.com/Yanis0118) |
-| [C_ygh](C_ygh/) | C | 数据／孪生／实验 | 2439 | [@2439345776-create](https://github.com/2439345776-create) |
-| [D_wzx](D_wzx/) | D | 上位机／可视化 | sisimoean | [@Sisimoean](https://github.com/Sisimoean) |
-| [E_wyc](E_wyc/) | E | 项目／场景／市场 | StevenWu | [@Stevenwu312](https://github.com/Stevenwu312) |
+| [C_ygh](C_ygh/) | C | 日志校验、统计、回放与实验设计 | 2439 | [@2439345776-create](https://github.com/2439345776-create) |
+| [D_wzx](D_wzx/) | D | 上位机 | sisimoean | [@Sisimoean](https://github.com/Sisimoean) |
+| [E_wyc](E_wyc/) | E | 项目、场景与市场 | StevenWu | [@Stevenwu312](https://github.com/Stevenwu312) |
 
 只把自己的日志放进自己的目录。不知道是谁写的日志不要猜人，先留在 `ProjectLog` 根下并注明原位置和归属待确认。
 
