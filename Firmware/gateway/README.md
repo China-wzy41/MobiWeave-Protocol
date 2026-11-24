@@ -1,7 +1,5 @@
-# 网关板端
+# 网关目录
 
-A 负责板端收发与串口输出，B 统一消息和日志，D 在 [Host](../../Host/README.md) 接入电脑端。这里尚无已验证固件。
+近期不单做一套网关产品。整条手机坐标 → 低功耗蓝牙（BLE）→ 本机节点 → LoRa → 队友节点 → 队友手机显示作为整体还没有实现，也没有整段验证。实验台上的 ESP↔LoRa 与两节点无线通信已在记录条件内做过。BLE、队友手机显示和整段集成还没做。这里还没有这条整段链路的固件。
 
-交付时补实际板型、引脚、依赖版本、构建/烧录命令、串口参数和样例日志。按[统一协议](../../docs/protocol/README.md)处理半帧、错误长度和重连。网关日志采集不能暗中替代断链实验中的无线业务传输。
-
-任务：[#2](https://github.com/China-wzy41/MobiWeave-Protocol/issues/2)、[#21](https://github.com/China-wzy41/MobiWeave-Protocol/issues/21)。
+电脑侧日志显示放在 [Host](../../Host/README.md)。采集日志不能代替节点之间的无线通信。方向见 [长期计划](../../docs/planning/长期计划.md)。
